@@ -128,7 +128,7 @@ function ScriptModal({ video, onClose, onApprove, onReject }) {
         </div>
 
         {/* Approve / Reject buttons */}
-        {video.status === 'pending_approval' && (
+        {(video.status === 'pending_approval' || video.status === 'error') && (
           <div style={{ padding: '16px 28px 24px', borderTop: '1px solid #eee', flexShrink: 0 }}>
             {!showReject ? (
               <div style={{ display: 'flex', gap: 12 }}>
@@ -224,12 +224,12 @@ function VideoCard({ video, onOpenScript, onQuickApprove }) {
           fontWeight: 600, cursor: 'pointer',
         }}>📄 Read Script</button>
 
-        {video.status === 'pending_approval' && (
+        {(video.status === 'pending_approval' || video.status === 'error') && (
           <button onClick={() => onOpenScript(video.id)} style={{
-            background: 'linear-gradient(135deg, #10b981, #059669)',
+            background: video.status === 'error' ? 'linear-gradient(135deg, #f59e0b, #d97706)' : 'linear-gradient(135deg, #10b981, #059669)',
             color: '#fff', border: 'none', borderRadius: 8,
             padding: '8px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer',
-          }}>✅ Review & Approve</button>
+          }}>{video.status === 'error' ? '🔄 Retry' : '✅ Review & Approve'}</button>
         )}
 
         {video.status === 'uploaded' && video.youtubeId && (
