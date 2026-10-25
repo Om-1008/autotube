@@ -16,6 +16,11 @@ function cleanScriptForTTS(script) {
   return script
     .replace(/\[B-ROLL:[^\]]*\]/g, '')
     .replace(/\[PAUSE\]/g, '...')
+    .replace(/\[.*?\]/g, '')           // remove any remaining bracket annotations
+    .replace(/[*#@^~`|\\]/g, '')       // strip markdown/special chars that confuse TTS
+    .replace(/["]/g, '"')              // normalize smart quotes
+    .replace(/[""]/g, '"')
+    .replace(/['']/g, "'")
     .replace(/\n{3,}/g, '\n\n')
     .replace(/  +/g, ' ')
     .trim();
@@ -76,11 +81,18 @@ async function generateChunkGoogle(text, chunkIndex, jobId, retries = 4) {
       return chunkPath;
     } catch (err) {
       const status = err.response && err.response.status;
-      if (attempt < retries && (status === 400 || status === 429 || status === 503 || !status)) {
-        // Exponential backoff: 2s, 4s, 8s, 16s
+      if (attempt < retries && (status === 429 || status === 503 || !status)) {
+        // Exponential backoff for rate limits / network errors: 2s, 4s, 8s, 16s
         const delay = Math.pow(2, attempt + 1) * 1000;
         console.log(`[Voiceover] Chunk ${chunkIndex} failed (${status || err.code}), retry ${attempt + 1}/${retries} in ${delay / 1000}s...`);
         await new Promise(r => setTimeout(r, delay));
+      } else if (status === 400) {
+        // Google rejected this specific text — generate 1s silence and skip
+        console.log(`[Voiceover] Chunk ${chunkIndex} rejected by Google TTS (400) — inserting silence`);
+        const chunkPath = path.join(AUDIO_DIR, `${jobId}_chunk_${chunkIndex}.mp3`);
+        const { execSync } = require('child_process');
+        execSync(`ffmpeg -y -f lavfi -i anullsrc=r=24000:cl=mono -t 1 -q:a 9 -acodec libmp3lame "${chunkPath}" 2>/dev/null`);
+        return chunkPath;
       } else {
         throw err;
       }
