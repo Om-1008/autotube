@@ -153,16 +153,16 @@ async function buildWithStockFootage(jobId, clips, voiceoverPath, outputPath, to
     'ffmpeg -y',
     `-f concat -safe 0 -i "${concatFile}"`,
     voiceArg,
-    `-vf "scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,${drawtext}"`,
+    `-vf "scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720,${drawtext}"`,
     audioMap,
-    `-c:v libx264 -preset fast -crf 23`,
-    `-c:a aac -b:a 192k`,
+    `-c:v libx264 -preset ultrafast -crf 28`,
+    `-c:a aac -b:a 128k`,
     `-t ${totalDuration}`,
     `"${outputPath}"`,
   ].filter(Boolean).join(' ');
 
   console.log('[Video] Rendering with stock footage...');
-  await execAsync(ffmpegCmd, { timeout: 600000 }); // 10 min timeout
+  await execAsync(ffmpegCmd, { timeout: 300000 }); // 5 min timeout
 
   // Cleanup temp files
   clipPaths.forEach(p => { try { fs.unlinkSync(p); } catch (_) {} });
@@ -213,12 +213,12 @@ async function buildWithColorBackgrounds(jobId, voiceoverPath, outputPath, total
     voiceArg,
     `-filter_complex "${concatFilter};${titleOverlay}"`,
     audioMap,
-    `-c:v libx264 -preset fast -crf 23`,
-    `-c:a aac -b:a 192k`,
+    `-c:v libx264 -preset ultrafast -crf 28`,
+    `-c:a aac -b:a 128k`,
     `"${outputPath}"`,
   ].filter(Boolean).join(' ');
 
-  await execAsync(ffmpegCmd, { timeout: 600000 });
+  await execAsync(ffmpegCmd, { timeout: 300000 });
 }
 
 // ─── Main render function ─────────────────────────────────────────────────────
