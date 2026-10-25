@@ -54,23 +54,38 @@ function splitIntoChunks(text, maxChars = 180) {
   return chunks.filter(c => c.length > 0);
 }
 
-// ─── Google TTS (free, no key required) ──────────────────────────────────────
-async function generateChunkGoogle(text, chunkIndex, jobId) {
+// ─── Google TTS (free, no key required) with retry + backoff ─────────────────
+async function generateChunkGoogle(text, chunkIndex, jobId, retries = 4) {
   const encoded = encodeURIComponent(text);
   const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encoded}&tl=en&client=tw-ob&ttsspeed=0.9`;
 
-  const res = await axios.get(url, {
-    responseType: 'arraybuffer',
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-      'Referer': 'https://translate.google.com/',
-    },
-    timeout: 30000,
-  });
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await axios.get(url, {
+        responseType: 'arraybuffer',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Referer': 'https://translate.google.com/',
+          'Accept-Language': 'en-US,en;q=0.9',
+        },
+        timeout: 30000,
+      });
 
-  const chunkPath = path.join(AUDIO_DIR, `${jobId}_chunk_${chunkIndex}.mp3`);
-  fs.writeFileSync(chunkPath, Buffer.from(res.data));
-  return chunkPath;
+      const chunkPath = path.join(AUDIO_DIR, `${jobId}_chunk_${chunkIndex}.mp3`);
+      fs.writeFileSync(chunkPath, Buffer.from(res.data));
+      return chunkPath;
+    } catch (err) {
+      const status = err.response && err.response.status;
+      if (attempt < retries && (status === 400 || status === 429 || status === 503 || !status)) {
+        // Exponential backoff: 2s, 4s, 8s, 16s
+        const delay = Math.pow(2, attempt + 1) * 1000;
+        console.log(`[Voiceover] Chunk ${chunkIndex} failed (${status || err.code}), retry ${attempt + 1}/${retries} in ${delay / 1000}s...`);
+        await new Promise(r => setTimeout(r, delay));
+      } else {
+        throw err;
+      }
+    }
+  }
 }
 
 // ─── Merge MP3 chunks using ffmpeg ───────────────────────────────────────────
@@ -100,8 +115,8 @@ async function generateVoiceover(jobId, scriptText) {
     if (i % 10 === 0) console.log(`[Voiceover] Generating chunk ${i + 1}/${chunks.length}...`);
     const chunkPath = await generateChunkGoogle(chunks[i], i, jobId);
     chunkPaths.push(chunkPath);
-    // Small delay to avoid rate limiting
-    if (i < chunks.length - 1) await new Promise(r => setTimeout(r, 150));
+    // Delay between chunks to avoid Google TTS rate limiting (400/429 errors)
+    if (i < chunks.length - 1) await new Promise(r => setTimeout(r, 500));
   }
 
   const outputPath = path.join(AUDIO_DIR, `${jobId}_voiceover.mp3`);
