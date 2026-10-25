@@ -42,7 +42,7 @@ async function researchTopic(niche, audience, pastTitles = []) {
     : '';
 
   const msg = await anthropic.messages.create({
-    model: 'claude-opus-4-5',
+    model: 'claude-haiku-4-5',
     max_tokens: 800,
     messages: [{
       role: 'user',
@@ -74,7 +74,7 @@ async function generateScript(topic, niche, audience) {
   console.log('[Claude] Generating script for:', topic.title);
 
   const msg = await anthropic.messages.create({
-    model: 'claude-opus-4-5',
+    model: 'claude-haiku-4-5',
     max_tokens: 4000,
     messages: [{
       role: 'user',
