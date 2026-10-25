@@ -73,7 +73,7 @@ async function generateChunkGoogle(text, chunkIndex, jobId) {
 // ─── Merge MP3 chunks using ffmpeg ───────────────────────────────────────────
 function mergeChunksFFmpeg(chunkPaths, outputPath) {
   // Write file list for ffmpeg concat
-  const listPath = path.join(AUDIO_DIR, `${outputPath}_list.txt`);
+  const listPath = path.join(AUDIO_DIR, `${path.basename(outputPath)}_list.txt`);
   const listContent = chunkPaths.map(p => `file '${p}'`).join('\n');
   fs.writeFileSync(listPath, listContent);
 
