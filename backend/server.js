@@ -292,14 +292,9 @@ app.post('/videos/:id/approve', async (req, res) => {
         }
       });
 
-      console.log('[Voiceover] ✅ Done for job:', req.params.id, '| Triggering Pictory render...');
+      console.log('[Voiceover] ✅ Done for job:', req.params.id, '| Triggering ffmpeg video render...');
 
-      // ── Session 3: Trigger Pictory video render ──
-      if (!process.env.PICTORY_CLIENT_ID) {
-        console.log('[Render] PICTORY keys not set — skipping render (Session 3 pending)');
-        return;
-      }
-
+      // ── Session 3: Render video with ffmpeg (+ Pixabay stock footage if API key set) ──
       try {
         const freshData = db.get().videos.find(v => v.id === req.params.id);
         const renderResult = await renderVideo(req.params.id, freshData.script, result.path);
