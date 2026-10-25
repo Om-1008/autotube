@@ -512,16 +512,20 @@ cron.schedule('0 6 * * *', async () => {
 
 // ─── Start server ─────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => {
-  console.log(`\n🚀 AutoTube backend running on port ${PORT}`);
-  console.log(`   Health:   http://localhost:${PORT}/health`);
-  console.log(`   Videos:   http://localhost:${PORT}/videos`);
-  console.log(`   Run now:  POST http://localhost:${PORT}/pipeline/run`);
 
-  // Set next run time on first start if not set
-  const data = db.get();
-  if (!data.nextGenerateAt) {
-    db.update(d => { d.nextGenerateAt = getNextRunTime(d.settings.frequencyDays); });
-    console.log(`   First video scheduled for: ${db.get().nextGenerateAt}`);
-  }
+// Init DB first (loads from Redis if configured), then start server
+db.init().then(() => {
+  app.listen(PORT, () => {
+    console.log(`\n🚀 AutoTube backend running on port ${PORT}`);
+    console.log(`   Health:   http://localhost:${PORT}/health`);
+    console.log(`   Videos:   http://localhost:${PORT}/videos`);
+    console.log(`   Run now:  POST http://localhost:${PORT}/pipeline/run`);
+
+    // Set next run time on first start if not set
+    const data = db.get();
+    if (!data.nextGenerateAt) {
+      db.update(d => { d.nextGenerateAt = getNextRunTime(d.settings.frequencyDays); });
+      console.log(`   First video scheduled for: ${db.get().nextGenerateAt}`);
+    }
+  });
 });
