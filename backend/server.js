@@ -67,7 +67,8 @@ Respond with ONLY valid JSON (no markdown, no explanation):
   });
 
   const raw = msg.content[0].text.trim();
-  return JSON.parse(raw);
+  const cleaned = raw.replace(/^```json\n?/, '').replace(/^```\n?/, '').replace(/\n?```$/, '').trim();
+  return JSON.parse(cleaned);
 }
 
 async function generateScript(topic, niche, audience) {
