@@ -67,6 +67,7 @@ Respond with ONLY valid JSON (no markdown, no explanation):
   });
 
   const raw = msg.content[0].text.trim();
+  console.log('[Claude] Topic raw response:', raw.substring(0, 200));
   const cleaned = raw.replace(/^```json\n?/, '').replace(/^```\n?/, '').replace(/\n?```$/, '').trim();
   return JSON.parse(cleaned);
 }
@@ -196,6 +197,7 @@ async function runPipeline() {
 
   } catch (err) {
     console.error('[Pipeline] ❌ Error:', err.message);
+    console.error('[Pipeline] Stack:', err.stack?.substring(0, 500));
     if (jobId) {
       db.update(d => {
         const job = d.videos.find(v => v.id === jobId);
