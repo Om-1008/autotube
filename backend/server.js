@@ -251,7 +251,7 @@ app.post('/videos/:id/approve', async (req, res) => {
   const data = db.get();
   const video = data.videos.find(v => v.id === req.params.id);
   if (!video) return res.status(404).json({ error: 'Video not found' });
-  if (video.status !== 'pending_approval') {
+  if (!['pending_approval', 'error'].includes(video.status)) {
     return res.status(400).json({ error: `Cannot approve video in status: ${video.status}` });
   }
 
@@ -276,14 +276,6 @@ app.post('/videos/:id/approve', async (req, res) => {
       const scriptText = videoData.script?.script;
 
       if (!scriptText) throw new Error('No script found on video job');
-      if (!process.env.ELEVENLABS_API_KEY) {
-        console.log('[Voiceover] ELEVENLABS_API_KEY not set — skipping voiceover (Session 2 pending)');
-        db.update(d => {
-          const v = d.videos.find(x => x.id === req.params.id);
-          if (v) { v.status = 'approved'; v.voiceoverNote = 'ElevenLabs key not configured yet'; }
-        });
-        return;
-      }
 
       const result = await generateVoiceover(req.params.id, scriptText);
 
