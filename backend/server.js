@@ -1,4 +1,6 @@
 require('dotenv').config();
+const fs = require('fs');
+const path = require('path');
 const express = require('express');
 const cors = require('cors');
 const cron = require('node-cron');
@@ -264,40 +266,61 @@ app.post('/videos/:id/approve', async (req, res) => {
     v.approvedAt = new Date().toISOString();
   });
 
-  console.log('[Approve] Video approved:', req.params.id, '| Triggering voiceover...');
-  res.json({ success: true, status: 'approved', message: 'Approved! Voiceover is generating now — takes 2-3 minutes.' });
+  console.log('[Approve] Video approved:', req.params.id, '| Triggering pipeline...');
+  res.json({ success: true, status: 'approved', message: 'Approved! Processing now — takes 2-5 minutes.' });
 
-  // Trigger voiceover generation in background (non-blocking)
+  // Trigger pipeline in background (non-blocking)
   setImmediate(async () => {
     try {
-      db.update(d => {
-        const v = d.videos.find(x => x.id === req.params.id);
-        if (v) v.status = 'voiceover';
-      });
-
       const videoData = db.get().videos.find(v => v.id === req.params.id);
       const scriptText = videoData.script?.script;
-
       if (!scriptText) throw new Error('No script found on video job');
 
-      const result = await generateVoiceover(req.params.id, scriptText);
+      // ── Smart resume: check if voiceover already exists ──
+      const expectedVoiceoverPath = path.join(__dirname, 'audio', `${req.params.id}_voiceover.mp3`);
+      const voiceoverExists = fs.existsSync(expectedVoiceoverPath);
+      let result;
 
-      db.update(d => {
-        const v = d.videos.find(x => x.id === req.params.id);
-        if (v) {
-          v.status = 'rendering';   // → Session 3 picks up here
-          v.voiceoverPath = result.path;
-          v.voiceoverSizeMB = result.sizeMB;
-          v.voiceoverAt = new Date().toISOString();
-        }
-      });
+      if (voiceoverExists) {
+        console.log('[Voiceover] ✅ Already exists — skipping regeneration');
+        const stats = fs.statSync(expectedVoiceoverPath);
+        result = { path: expectedVoiceoverPath, sizeMB: parseFloat((stats.size / 1024 / 1024).toFixed(2)) };
+        db.update(d => {
+          const v = d.videos.find(x => x.id === req.params.id);
+          if (v) v.status = 'rendering';
+        });
+      } else {
+        db.update(d => {
+          const v = d.videos.find(x => x.id === req.params.id);
+          if (v) v.status = 'voiceover';
+        });
+        result = await generateVoiceover(req.params.id, scriptText);
+
+        db.update(d => {
+          const v = d.videos.find(x => x.id === req.params.id);
+          if (v) {
+            v.status = 'rendering';
+            v.voiceoverPath = result.path;
+            v.voiceoverSizeMB = result.sizeMB;
+            v.voiceoverAt = new Date().toISOString();
+          }
+        });
+      } // end else (voiceover generated fresh)
 
       console.log('[Voiceover] ✅ Done for job:', req.params.id, '| Triggering ffmpeg video render...');
 
       // ── Session 3: Render video with ffmpeg (+ Pixabay stock footage if API key set) ──
       try {
         const freshData = db.get().videos.find(v => v.id === req.params.id);
-        const renderResult = await renderVideo(req.params.id, freshData.script, result.path);
+        const expectedVideoPath = path.join(__dirname, 'videos', `${req.params.id}_final.mp4`);
+        let renderResult;
+        if (fs.existsSync(expectedVideoPath)) {
+          console.log('[Render] ✅ Video already exists — skipping re-render');
+          const stats = fs.statSync(expectedVideoPath);
+          renderResult = { path: expectedVideoPath, sizeMB: parseFloat((stats.size / 1024 / 1024).toFixed(1)) };
+        } else {
+          renderResult = await renderVideo(req.params.id, freshData.script, result.path);
+        }
 
         db.update(d => {
           const v = d.videos.find(x => x.id === req.params.id);
