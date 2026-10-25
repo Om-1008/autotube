@@ -34,8 +34,10 @@ async function redisGet() {
       headers: { Authorization: `Bearer ${REDIS_TOKEN}` },
     });
     const json = await res.json();
+    console.log('[DB] Redis raw result type:', typeof json.result, json.result ? 'has value' : 'null');
     if (!json.result) return null;
-    return JSON.parse(json.result);
+    const parsed = typeof json.result === 'string' ? JSON.parse(json.result) : json.result;
+    return parsed;
   } catch (e) {
     console.error('[DB] Redis GET error:', e.message);
     return null;
@@ -80,9 +82,16 @@ async function init() {
   if (useRedis) {
     console.log('[DB] Connecting to Upstash Redis...');
     const data = await redisGet();
-    _cache = data || DEFAULT();
+    const def = DEFAULT();
+    // Merge with defaults to handle partial or missing data
+    _cache = {
+      ...def,
+      ...(data || {}),
+      videos: (data && Array.isArray(data.videos)) ? data.videos : [],
+      settings: { ...def.settings, ...(data && data.settings ? data.settings : {}) },
+    };
     console.log(`[DB] Loaded from Redis: ${_cache.videos.length} videos`);
-    // Also write to local file as backup
+    // Write to local file as backup
     fileSave(_cache);
   } else {
     console.log('[DB] Using local file (data.json)');
