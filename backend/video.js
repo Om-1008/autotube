@@ -72,7 +72,7 @@ async function buildVideo(jobId, scriptData, voiceoverPath) {
 
   const cmd = [
     'ffmpeg -y',
-    `-loop 1 -i "${titleCardPath}"`,
+    `-loop 1 -r 1 -i "${titleCardPath}"`,
     voiceArg,
     audioMap,
     `-c:v libx264 -preset ultrafast -tune stillimage -crf 28`,
@@ -83,7 +83,7 @@ async function buildVideo(jobId, scriptData, voiceoverPath) {
   ].filter(Boolean).join(' ');
 
   console.log('[Video] Rendering (static image + audio)...');
-  await execAsync(cmd, { timeout: 120000 }); // 2 min max — should finish in ~5-10 sec
+  await execAsync(cmd, { timeout: 60000 }); // 1 min max — at 1fps should finish in ~5-10 sec
 
   // Cleanup
   try { fs.unlinkSync(titleCardPath); } catch (_) {}
