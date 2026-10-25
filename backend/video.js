@@ -7,8 +7,11 @@ const { execSync, exec } = require('child_process');
 const { promisify } = require('util');
 const execAsync = promisify(exec);
 
-const VIDEO_DIR = path.join(__dirname, 'videos');
-const TEMP_DIR = path.join(__dirname, 'temp');
+const PERSIST_BASE = process.env.RENDER
+  ? '/opt/render/project/src/backend/data'
+  : __dirname;
+const VIDEO_DIR = path.join(PERSIST_BASE, 'videos');
+const TEMP_DIR = path.join(__dirname, 'temp'); // temp doesn't need to persist
 
 [VIDEO_DIR, TEMP_DIR].forEach(d => { if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true }); });
 

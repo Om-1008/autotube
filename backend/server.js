@@ -15,6 +15,10 @@ const {
   uploadToYouTube, isYouTubeConnected, getChannelInfo,
 } = require('./youtube');
 
+const PERSIST_BASE = process.env.RENDER
+  ? '/opt/render/project/src/backend/data'
+  : __dirname;
+
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -277,7 +281,7 @@ app.post('/videos/:id/approve', async (req, res) => {
       if (!scriptText) throw new Error('No script found on video job');
 
       // ── Smart resume: check if voiceover already exists ──
-      const expectedVoiceoverPath = path.join(__dirname, 'audio', `${req.params.id}_voiceover.mp3`);
+      const expectedVoiceoverPath = path.join(PERSIST_BASE, 'audio', `${req.params.id}_voiceover.mp3`);
       const voiceoverExists = fs.existsSync(expectedVoiceoverPath);
       let result;
 
@@ -312,7 +316,7 @@ app.post('/videos/:id/approve', async (req, res) => {
       // ── Session 3: Render video with ffmpeg (+ Pixabay stock footage if API key set) ──
       try {
         const freshData = db.get().videos.find(v => v.id === req.params.id);
-        const expectedVideoPath = path.join(__dirname, 'videos', `${req.params.id}_final.mp4`);
+        const expectedVideoPath = path.join(PERSIST_BASE, 'videos', `${req.params.id}_final.mp4`);
         let renderResult;
         if (fs.existsSync(expectedVideoPath)) {
           console.log('[Render] ✅ Video already exists — skipping re-render');

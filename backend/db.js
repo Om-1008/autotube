@@ -2,7 +2,10 @@
 const fs = require('fs');
 const path = require('path');
 
-const DB_FILE = path.join(__dirname, 'data.json');
+// Use persistent disk if mounted (survives redeploys), else fall back to local
+const DB_FILE = process.env.RENDER
+  ? '/opt/render/project/src/backend/data/data.json'
+  : path.join(__dirname, 'data.json');
 
 const DEFAULT = {
   videos: [],      // all video jobs

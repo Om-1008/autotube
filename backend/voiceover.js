@@ -5,7 +5,10 @@ const path = require('path');
 const axios = require('axios');
 const { execSync } = require('child_process');
 
-const AUDIO_DIR = path.join(__dirname, 'audio');
+const PERSIST_BASE = process.env.RENDER
+  ? '/opt/render/project/src/backend/data'
+  : __dirname;
+const AUDIO_DIR = path.join(PERSIST_BASE, 'audio');
 if (!fs.existsSync(AUDIO_DIR)) fs.mkdirSync(AUDIO_DIR, { recursive: true });
 
 // ─── Clean script for TTS ─────────────────────────────────────────────────────
