@@ -23,8 +23,13 @@ async function getAudioDuration(audioPath) {
 
 // ─── Main render: lavfi color source + audio → MP4 (no PNG file needed) ──────
 async function buildVideo(jobId, scriptData, voiceoverPath) {
-  const title = scriptData.title || 'Personal Finance Tips';
   console.log(`[Video] Starting render for job: ${jobId}`);
+
+  // Free memory before spawning ffmpeg — voiceover chunks are done, GC anything held
+  if (global.gc) {
+    global.gc();
+    console.log('[Video] GC run before ffmpeg');
+  }
 
   const totalDuration = voiceoverPath && fs.existsSync(voiceoverPath)
     ? await getAudioDuration(voiceoverPath)
