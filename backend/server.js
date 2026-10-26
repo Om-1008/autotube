@@ -365,8 +365,12 @@ app.post('/videos/:id/approve', async (req, res) => {
         console.log('[Render] ✅ Video ready:', req.params.id, '| Triggering YouTube upload...');
 
         // ── Session 4: Auto-upload to YouTube ──
-        if (!isYouTubeConnected() || !process.env.YOUTUBE_CLIENT_ID) {
-          console.log('[Upload] YouTube not connected — skipping upload (Session 4 pending)');
+        if (!process.env.YOUTUBE_CLIENT_ID || !(await isYouTubeConnected())) {
+          console.log('[Upload] YouTube not connected — skipping upload');
+          db.update(d => {
+            const v = d.videos.find(x => x.id === req.params.id);
+            if (v) { v.status = 'done'; v.youtubeUrl = null; }
+          });
           return;
         }
 
@@ -465,7 +469,7 @@ app.get('/auth/youtube/callback', async (req, res) => {
 
 // YouTube connection status
 app.get('/auth/youtube/status', async (req, res) => {
-  const connected = isYouTubeConnected();
+  const connected = await isYouTubeConnected();
   if (!connected) return res.json({ connected: false });
   try {
     const channel = await getChannelInfo();
@@ -498,7 +502,7 @@ app.get('/credits/elevenlabs', async (req, res) => {
 // YouTube channel stats (for dashboard header)
 app.get('/channel/stats', async (req, res) => {
   try {
-    if (!isYouTubeConnected()) return res.json({ connected: false });
+    if (!(await isYouTubeConnected())) return res.json({ connected: false });
     const info = await getChannelInfo();
     res.json({ connected: true, ...info });
   } catch (e) {

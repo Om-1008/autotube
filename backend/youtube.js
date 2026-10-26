@@ -1,35 +1,53 @@
-// Session 4: YouTube Data API v3 — auto-upload rendered videos
-const fs = require('fs');
-const path = require('path');
+// Session 4: YouTube Data API v3 - auto-upload rendered videos
+// Tokens stored in Upstash Redis so they survive Render restarts/redeploys
 const { google } = require('googleapis');
-const db = require('./db');
 
-const TOKENS_FILE = path.join(__dirname, 'youtube_tokens.json');
+const REDIS_URL = process.env.UPSTASH_REDIS_URL;
+const REDIS_TOKEN = process.env.UPSTASH_REDIS_TOKEN;
+const TOKENS_KEY = 'autotube:youtube_tokens';
 
-// ─── OAuth2 client setup ──────────────────────────────────────────────────────
+// OAuth2 client setup
 function getOAuthClient() {
   return new google.auth.OAuth2(
     process.env.YOUTUBE_CLIENT_ID,
     process.env.YOUTUBE_CLIENT_SECRET,
-    process.env.YOUTUBE_REDIRECT_URI || 'http://localhost:4000/auth/youtube/callback'
+    process.env.YOUTUBE_REDIRECT_URI || 'https://autotube-227z.onrender.com/auth/youtube/callback'
   );
 }
 
-// ─── Save / load tokens from disk ────────────────────────────────────────────
-function saveTokens(tokens) {
-  fs.writeFileSync(TOKENS_FILE, JSON.stringify(tokens, null, 2));
-  console.log('[YouTube] Tokens saved to disk');
+// Save tokens to Redis (survives restarts + redeploys)
+async function saveTokens(tokens) {
+  try {
+    await fetch(`${REDIS_URL}/set/${TOKENS_KEY}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${REDIS_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ value: JSON.stringify(tokens) }),
+    });
+    console.log('[YouTube] Tokens saved to Redis');
+  } catch (e) {
+    console.error('[YouTube] Failed to save tokens to Redis:', e.message);
+  }
 }
 
-function loadTokens() {
-  if (!fs.existsSync(TOKENS_FILE)) return null;
-  return JSON.parse(fs.readFileSync(TOKENS_FILE, 'utf8'));
+// Load tokens from Redis
+async function loadTokens() {
+  try {
+    const res = await fetch(`${REDIS_URL}/get/${TOKENS_KEY}`, {
+      headers: { Authorization: `Bearer ${REDIS_TOKEN}` },
+    });
+    const json = await res.json();
+    if (!json.result) return null;
+    return typeof json.result === 'string' ? JSON.parse(json.result) : json.result;
+  } catch (e) {
+    console.error('[YouTube] Failed to load tokens from Redis:', e.message);
+    return null;
+  }
 }
 
-// ─── Get authenticated YouTube client ────────────────────────────────────────
+// Get authenticated YouTube client
 async function getAuthenticatedClient() {
   const oauth2Client = getOAuthClient();
-  const tokens = loadTokens();
+  const tokens = await loadTokens();
 
   if (!tokens) {
     throw new Error('YouTube not connected. Visit /auth/youtube to connect your channel.');
@@ -37,74 +55,82 @@ async function getAuthenticatedClient() {
 
   oauth2Client.setCredentials(tokens);
 
-  // Auto-refresh if token is expired
-  oauth2Client.on('tokens', (newTokens) => {
+  // Auto-refresh expired tokens and save back to Redis
+  oauth2Client.on('tokens', async (newTokens) => {
     const merged = { ...tokens, ...newTokens };
-    saveTokens(merged);
-    console.log('[YouTube] Token refreshed and saved');
+    await saveTokens(merged);
+    console.log('[YouTube] Token auto-refreshed and saved to Redis');
   });
 
   return oauth2Client;
 }
 
-// ─── Generate OAuth URL (user visits this to connect their channel) ───────────
+// Generate OAuth URL - user visits this once to connect their channel
 function getAuthUrl() {
   const oauth2Client = getOAuthClient();
   return oauth2Client.generateAuthUrl({
-    access_type: 'offline',      // gets refresh_token so we never need to re-auth
+    access_type: 'offline',
     scope: [
       'https://www.googleapis.com/auth/youtube.upload',
       'https://www.googleapis.com/auth/youtube',
     ],
-    prompt: 'consent',           // always show consent to ensure refresh_token
+    prompt: 'consent',
   });
 }
 
-// ─── Exchange auth code for tokens ───────────────────────────────────────────
+// Exchange auth code for tokens (called by OAuth callback)
 async function exchangeCodeForTokens(code) {
   const oauth2Client = getOAuthClient();
   const { tokens } = await oauth2Client.getToken(code);
-  saveTokens(tokens);
+  await saveTokens(tokens);
   return tokens;
 }
 
-// ─── Build category & privacy settings ───────────────────────────────────────
+// Check if YouTube is connected (checks Redis)
+async function isYouTubeConnected() {
+  const tokens = await loadTokens();
+  return !!tokens;
+}
+
+// Build video metadata for YouTube upload
 function getVideoMetadata(scriptData) {
   const tags = scriptData.tags || [];
-  // Add standard finance channel tags
   const allTags = [
     ...tags,
     'personal finance', 'money', 'investing', 'financial freedom',
     'save money', 'make money', 'finance tips', '2026',
-  ].slice(0, 500 / 10);  // YouTube: 500 total chars in tags
+  ].slice(0, 50);
 
   return {
     title: scriptData.title,
     description: [
       scriptData.description || '',
       '',
-      '─────────────────────────────────',
-      '📌 CHAPTERS',
+      '---------------------------------',
+      'CHAPTERS',
       ...(scriptData.sections || []).map((s, i) => `${i === 0 ? '0:00' : ''} ${s.name}`),
       '',
-      '─────────────────────────────────',
-      '⚠️ DISCLOSURE: This video was created with AI assistance.',
+      '---------------------------------',
+      'DISCLOSURE: This video was created with AI assistance.',
       'Information is for educational purposes only. Not financial advice.',
       'Always consult a qualified financial advisor before investing.',
       '',
       '#personalfinance #money #investing #financialfreedom',
     ].join('\n'),
     tags: allTags,
-    categoryId: '27',             // "Education" category — highest RPM for finance
+    categoryId: '27',
     defaultLanguage: 'en',
     defaultAudioLanguage: 'en',
   };
 }
 
-// ─── Upload video to YouTube ──────────────────────────────────────────────────
+// Upload video to YouTube
 async function uploadToYouTube(jobId, videoPath, scriptData) {
+  const fs = require('fs');
+  const db = require('./db');
+
   if (!process.env.YOUTUBE_CLIENT_ID || !process.env.YOUTUBE_CLIENT_SECRET) {
-    throw new Error('YouTube OAuth credentials not set in .env');
+    throw new Error('YouTube OAuth credentials not set');
   }
 
   const auth = await getAuthenticatedClient();
@@ -128,7 +154,6 @@ async function uploadToYouTube(jobId, videoPath, scriptData) {
       status: {
         privacyStatus: 'public',
         selfDeclaredMadeForKids: false,
-        // YouTube 2026 AI content disclosure — REQUIRED for AI-generated content
         containsSyntheticMedia: true,
       },
     },
@@ -137,7 +162,6 @@ async function uploadToYouTube(jobId, videoPath, scriptData) {
       body: fs.createReadStream(videoPath),
     },
   }, {
-    // Track upload progress
     onUploadProgress: (evt) => {
       const pct = Math.round((evt.bytesRead / fs.statSync(videoPath).size) * 100);
       if (pct % 10 === 0) console.log(`[YouTube] Upload progress: ${pct}%`);
@@ -146,10 +170,9 @@ async function uploadToYouTube(jobId, videoPath, scriptData) {
 
   const videoId = res.data.id;
   const videoUrl = `https://youtu.be/${videoId}`;
-  console.log(`[YouTube] ✅ Uploaded! URL: ${videoUrl}`);
+  console.log(`[YouTube] Uploaded! URL: ${videoUrl}`);
 
-  // Update DB
-  db.update(d => {
+  await db.update(d => {
     const v = d.videos.find(x => x.id === jobId);
     if (v) {
       v.status = 'uploaded';
@@ -162,12 +185,7 @@ async function uploadToYouTube(jobId, videoPath, scriptData) {
   return { videoId, videoUrl };
 }
 
-// ─── Check if YouTube is connected ───────────────────────────────────────────
-function isYouTubeConnected() {
-  return fs.existsSync(TOKENS_FILE);
-}
-
-// ─── Get channel info ─────────────────────────────────────────────────────────
+// Get channel info
 async function getChannelInfo() {
   const auth = await getAuthenticatedClient();
   const youtube = google.youtube({ version: 'v3', auth });
