@@ -4,13 +4,11 @@
   "description": "AutoTube backend - YouTube automation pipeline",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
+    "start": "node --max-old-space-size=400 server.js",
     "dev": "nodemon server.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.27.0",
-    "@remotion/bundler": "^4.0.538",
-    "@remotion/renderer": "^4.0.538",
     "axios": "^1.20.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
@@ -20,7 +18,6 @@
     "googleapis": "^188.0.0",
     "node-cron": "^3.0.3",
     "nodemailer": "^6.9.14",
-    "remotion": "^4.0.538",
     "uuid": "^10.0.0"
   },
   "devDependencies": {
