@@ -23,26 +23,69 @@ async function getAudioDuration(audioPath) {
   return parseFloat(stdout.trim());
 }
 
-// ─── Generate a title card PNG using ffmpeg lavfi ────────────────────────────
+// ─── Generate a title card PNG using Node.js canvas (no ffmpeg font issues) ──
 async function generateTitleCard(jobId, title, outputPng) {
+  // Use Python + PIL to draw the title card — avoids ffmpeg drawtext escaping issues
   const safeTitle = title
-    .replace(/['"\\:]/g, ' ')
+    .replace(/[^\w\s$.,!?()-]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
-    .substring(0, 60);
+    .substring(0, 80);
 
-  // Split into two lines if long
-  const words = safeTitle.split(' ');
-  const mid = Math.ceil(words.length / 2);
-  const line1 = words.slice(0, mid).join(' ');
-  const line2 = words.slice(mid).join(' ');
+  const script = `
+import sys, textwrap
+try:
+    from PIL import Image, ImageDraw, ImageFont
+    img = Image.new('RGB', (1280, 720), color=(15, 52, 96))
+    draw = ImageDraw.Draw(img)
+    title = ${JSON.stringify(safeTitle)}
+    # Try to use a system font, fall back to default
+    try:
+        font = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', 54)
+        small_font = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', 32)
+    except:
+        font = ImageFont.load_default()
+        small_font = font
+    # Word wrap title
+    lines = textwrap.wrap(title, width=28)
+    total_h = len(lines) * 70
+    y = (720 - total_h) // 2 - 20
+    for line in lines:
+        bbox = draw.textbbox((0, 0), line, font=font)
+        w = bbox[2] - bbox[0]
+        draw.text(((1280 - w) // 2, y), line, font=font, fill='white')
+        y += 70
+    # Subtitle
+    sub = 'WealthSutra · Personal Finance'
+    bbox = draw.textbbox((0, 0), sub, font=small_font)
+    draw.text(((1280 - (bbox[2]-bbox[0])) // 2, 640), sub, font=small_font, fill=(150, 200, 255))
+    img.save(${JSON.stringify(outputPng)})
+    print('ok')
+except Exception as e:
+    print('err:' + str(e), file=sys.stderr)
+    sys.exit(1)
+`;
 
-  const drawtext = line2
-    ? `drawtext=text='${line1}':fontsize=56:fontcolor=white:x=(w-text_w)/2:y=(h-text_h)/2-40:box=1:boxcolor=black@0.4:boxborderw=10,drawtext=text='${line2}':fontsize=56:fontcolor=white:x=(w-text_w)/2:y=(h-text_h)/2+40:box=1:boxcolor=black@0.4:boxborderw=10`
-    : `drawtext=text='${line1}':fontsize=56:fontcolor=white:x=(w-text_w)/2:y=(h-text_h)/2:box=1:boxcolor=black@0.4:boxborderw=10`;
+  const scriptPath = path.join(TEMP_DIR, `${jobId}_card.py`);
+  fs.writeFileSync(scriptPath, script);
+  try {
+    await execAsync(`python3 -m pip install Pillow -q --break-system-packages 2>/dev/null || true`, { timeout: 30000 });
+    await execAsync(`python3 "${scriptPath}"`, { timeout: 15000 });
+  } catch (pilErr) {
+    console.log('[Video] PIL failed, falling back to ffmpeg lavfi title card:', pilErr.message);
+    // Fallback: plain colored box, no text (safe, always works)
+    await execAsync(
+      `ffmpeg -y -f lavfi -i "color=c=0f3460:size=1280x720:duration=1" -frames:v 1 "${outputPng}"`,
+      { timeout: 15000 }
+    );
+  } finally {
+    try { fs.unlinkSync(scriptPath); } catch (_) {}
+  }
 
-  const cmd = `ffmpeg -y -f lavfi -i "color=c=0f3460:size=1280x720:duration=1" -vf "${drawtext}" -frames:v 1 "${outputPng}" 2>/dev/null`;
-  await execAsync(cmd, { timeout: 30000 });
+  // Verify PNG was created
+  if (!fs.existsSync(outputPng)) {
+    throw new Error(`Title card PNG not created: ${outputPng}`);
+  }
 }
 
 // ─── Main render: static image + audio → MP4 (fast, ~5 sec for any length) ──
