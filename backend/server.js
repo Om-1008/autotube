@@ -81,7 +81,8 @@ Respond with ONLY valid JSON (no markdown, no explanation):
 async function generateScript(topic, niche, audience) {
   console.log('[Claude] Generating script for:', topic.title);
 
-  const msg = await anthropic.messages.create({
+  // Step 1: Generate the script as plain text (avoids JSON escaping issues)
+  const scriptMsg = await anthropic.messages.create({
     model: 'claude-haiku-4-5',
     max_tokens: 4000,
     messages: [{
@@ -101,32 +102,58 @@ Script requirements:
 - Include [B-ROLL: description] markers for the video editor to insert footage
 - End with a strong subscribe/comment CTA
 
-Respond with valid JSON only:
+Output ONLY the script text. No JSON, no explanation, just the script.`,
+    }],
+  });
+
+  const scriptText = scriptMsg.content[0].text.trim();
+  const wordCount = scriptText.split(/\s+/).length;
+  console.log('[Claude] Script text generated:', wordCount, 'words');
+
+  // Step 2: Get metadata as JSON (small, safe — no long strings)
+  const metaMsg = await anthropic.messages.create({
+    model: 'claude-haiku-4-5',
+    max_tokens: 500,
+    messages: [{
+      role: 'user',
+      content: `For a YouTube video titled: "${topic.title}"
+About: ${niche} for ${audience} audience.
+
+Respond with ONLY valid JSON (no markdown):
 {
-  "title": "${topic.title}",
-  "duration": "estimated X minutes",
-  "wordCount": 0,
-  "script": "Full script text here with [PAUSE] and [B-ROLL: ...] markers",
-  "sections": [
-    {"name": "Hook", "startWord": 0, "endWord": 65},
-    {"name": "Problem Setup", "startWord": 65, "endWord": 195},
-    {"name": "Main Content", "startWord": 195, "endWord": 1100},
-    {"name": "Affiliate", "startWord": 1100, "endWord": 1200},
-    {"name": "CTA", "startWord": 1200, "endWord": 1300}
-  ],
+  "duration": "9 minutes",
   "thumbnailIdeas": ["idea 1", "idea 2", "idea 3"],
-  "description": "YouTube video description (under 200 words, includes keywords)",
-  "tags": ["tag1", "tag2", "tag3", "tag4", "tag5"]
+  "description": "YouTube description under 150 words with keywords",
+  "tags": ["tag1", "tag2", "tag3", "tag4", "tag5", "tag6", "tag7", "tag8"]
 }`,
     }],
   });
 
-  const raw = msg.content[0].text.trim();
-  // Strip markdown code fences if Claude adds them
-  const cleaned = raw.replace(/^```json\n?/, '').replace(/\n?```$/, '').trim();
-  const result = JSON.parse(cleaned);
-  result.wordCount = result.script.split(' ').length;
-  return result;
+  const metaRaw = metaMsg.content[0].text.trim();
+  const metaCleaned = metaRaw.replace(/^```json\n?/, '').replace(/^```\n?/, '').replace(/\n?```$/, '').trim();
+  let meta;
+  try {
+    meta = JSON.parse(metaCleaned);
+  } catch (e) {
+    console.warn('[Claude] Meta JSON parse failed, using defaults:', e.message);
+    meta = { duration: '9 minutes', thumbnailIdeas: [], description: topic.title, tags: [niche] };
+  }
+
+  return {
+    title: topic.title,
+    duration: meta.duration,
+    wordCount,
+    script: scriptText,
+    sections: [
+      { name: 'Hook', startWord: 0, endWord: 65 },
+      { name: 'Problem Setup', startWord: 65, endWord: 195 },
+      { name: 'Main Content', startWord: 195, endWord: wordCount - 100 },
+      { name: 'CTA', startWord: wordCount - 100, endWord: wordCount },
+    ],
+    thumbnailIdeas: meta.thumbnailIdeas,
+    description: meta.description,
+    tags: meta.tags,
+  };
 }
 
 // ─── Core pipeline ────────────────────────────────────────────────────────────
