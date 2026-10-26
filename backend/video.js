@@ -55,7 +55,7 @@ async function buildVideo(jobId, scriptData, voiceoverPath) {
   ].filter(Boolean).join(' ');
 
   console.log('[Video] Rendering (lavfi color + audio, no PNG)...');
-  await execAsync(cmd, { timeout: 60000 });
+  await execAsync(cmd, { timeout: 180000 }); // 3 min — 9-min video at 1fps takes ~85 sec
 
   const stats = fs.statSync(outputPath);
   const sizeMB = (stats.size / 1024 / 1024).toFixed(1);
