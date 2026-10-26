@@ -53,6 +53,15 @@ async function getAuthenticatedClient() {
     throw new Error('YouTube not connected. Visit /auth/youtube to connect your channel.');
   }
 
+  // Debug: log which token fields we have
+  const tokenKeys = Object.keys(tokens);
+  console.log('[YouTube] Token fields in Redis:', tokenKeys.join(', '));
+
+  if (!tokens.refresh_token) {
+    console.error('[YouTube] Missing refresh_token! Need to re-auth. Go to /auth/youtube/revoke then /auth/youtube');
+    throw new Error('YouTube refresh_token missing. Visit /auth/youtube/revoke to reset, then re-authorize at /auth/youtube');
+  }
+
   oauth2Client.setCredentials(tokens);
 
   // Auto-refresh expired tokens and save back to Redis
