@@ -4,7 +4,8 @@
   "description": "AutoTube backend - YouTube automation pipeline",
   "main": "server.js",
   "scripts": {
-    "start": "node --max-old-space-size=350 --expose-gc server.js",
+    "start": "node --max-old-space-size=350 server.js",
+    "render": "node render-job.js",
     "dev": "nodemon server.js"
   },
   "dependencies": {
@@ -22,5 +23,8 @@
   },
   "devDependencies": {
     "nodemon": "^3.1.4"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

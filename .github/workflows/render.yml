@@ -1,0 +1,86 @@
+name: Render video
+run-name: Render ${{ inputs.job_id }}
+
+# Triggered by the AutoTube server (POST /actions/workflows/render.yml/dispatches)
+# when a script is approved. Can also be run by hand from the Actions tab.
+on:
+  workflow_dispatch:
+    inputs:
+      job_id:
+        description: AutoTube job ID to render
+        required: true
+        type: string
+
+concurrency:
+  group: render-${{ inputs.job_id }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      JOB_ID: ${{ inputs.job_id }}
+      UPSTASH_REDIS_URL: ${{ secrets.UPSTASH_REDIS_URL }}
+      UPSTASH_REDIS_TOKEN: ${{ secrets.UPSTASH_REDIS_TOKEN }}
+      PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+      YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+      YOUTUBE_REDIRECT_URI: ${{ secrets.YOUTUBE_REDIRECT_URI }}
+      TTS_VOICE: ${{ vars.TTS_VOICE }}
+      YOUTUBE_PRIVACY: ${{ vars.YOUTUBE_PRIVACY }}
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Validate job id
+        working-directory: .
+        run: |
+          if [[ ! "$JOB_ID" =~ ^[0-9a-f-]{36}$ ]]; then echo "Invalid job id"; exit 1; fi
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Tell dashboard the render server started
+        run: node job-ping.js "$JOB_ID" "Render server started — installing video tools"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install ffmpeg and neural voice
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg > /dev/null
+          pip install --quiet edge-tts==7.3.1
+          ffmpeg -version | head -1
+
+      - name: Install dependencies
+        run: npm ci --omit=dev --no-audit --no-fund
+
+      - name: Render and upload
+        env:
+          OUTPUT_DIR: ${{ runner.temp }}/out
+        run: node render-job.js "$JOB_ID"
+
+      - name: Keep MP4 + thumbnail (14 days)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: video-${{ inputs.job_id }}
+          path: ${{ runner.temp }}/out/
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Report failure to dashboard
+        if: failure() || cancelled()
+        run: node render-job.js --mark-failed "$JOB_ID" "Render workflow failed or was cancelled — open the run log for details"
