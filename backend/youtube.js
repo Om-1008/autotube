@@ -15,29 +15,38 @@ function getOAuthClient() {
   );
 }
 
+// Upstash command helper (array format: ["SET", key, value]) - stores raw strings, no wrapper
+async function redisCmd(cmd) {
+  const res = await fetch(REDIS_URL, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${REDIS_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(cmd),
+  });
+  return res.json();
+}
+
 // Save tokens to Redis (survives restarts + redeploys)
 async function saveTokens(tokens) {
   try {
-    await fetch(`${REDIS_URL}/set/${TOKENS_KEY}`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${REDIS_TOKEN}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ value: JSON.stringify(tokens) }),
-    });
+    await redisCmd(['SET', TOKENS_KEY, JSON.stringify(tokens)]);
     console.log('[YouTube] Tokens saved to Redis');
   } catch (e) {
     console.error('[YouTube] Failed to save tokens to Redis:', e.message);
   }
 }
 
-// Load tokens from Redis
+// Load tokens from Redis (unwraps legacy { value: "<json>" } format too)
 async function loadTokens() {
   try {
-    const res = await fetch(`${REDIS_URL}/get/${TOKENS_KEY}`, {
-      headers: { Authorization: `Bearer ${REDIS_TOKEN}` },
-    });
-    const json = await res.json();
-    if (!json.result) return null;
-    return typeof json.result === 'string' ? JSON.parse(json.result) : json.result;
+    const json = await redisCmd(['GET', TOKENS_KEY]);
+    let t = json.result;
+    if (!t) return null;
+    if (typeof t === 'string') t = JSON.parse(t);
+    // Legacy wrapper from earlier save format
+    if (t && t.value && !t.access_token && !t.refresh_token) {
+      t = typeof t.value === 'string' ? JSON.parse(t.value) : t.value;
+    }
+    return t;
   } catch (e) {
     console.error('[YouTube] Failed to load tokens from Redis:', e.message);
     return null;

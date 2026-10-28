@@ -472,9 +472,10 @@ app.get('/auth/youtube/revoke', async (req, res) => {
   try {
     const REDIS_URL = process.env.UPSTASH_REDIS_URL;
     const REDIS_TOKEN = process.env.UPSTASH_REDIS_TOKEN;
-    await fetch(`${REDIS_URL}/del/autotube:youtube_tokens`, {
+    await fetch(REDIS_URL, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${REDIS_TOKEN}` },
+      headers: { Authorization: `Bearer ${REDIS_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(['DEL', 'autotube:youtube_tokens']),
     });
     res.send('YouTube tokens cleared. <a href="/auth/youtube">Click here to re-authorize</a>');
   } catch (e) {
