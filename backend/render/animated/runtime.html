@@ -1,0 +1,670 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+@font-face { font-family: Anton; src: url(../fonts/Anton-Regular.ttf); }
+@font-face { font-family: Nunito; src: url(../fonts/Nunito.ttf); font-weight: 200 1000; }
+html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: #FFF6EA; }
+body.thumb { width: 1280px; height: 720px; }
+svg { position: absolute; inset: 0; }
+#cap { position: absolute; left: 0; right: 0; bottom: 64px; display: flex; justify-content: center; }
+#capInner { font-family: Anton; font-size: 66px; letter-spacing: 1px; color: #fff; background: #1E2A3A;
+  padding: 10px 34px 14px; border-radius: 22px; text-transform: uppercase; box-shadow: 0 10px 0 rgba(30,42,58,0.18);
+  transform-origin: 50% 100%; white-space: nowrap; visibility: hidden; }
+#capInner b { color: #FFC531; font-weight: normal; }
+text { font-family: Nunito; }
+</style></head>
+<body>
+<svg id="s" viewBox="0 0 1920 1080" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="gGreen" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#34D27A"/><stop offset="1" stop-color="#16A34A"/></linearGradient>
+    <linearGradient id="gGold" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFD45E"/><stop offset="1" stop-color="#F5A700"/></linearGradient>
+    <linearGradient id="gCoral" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FF8A7A"/><stop offset="1" stop-color="#EF4444"/></linearGradient>
+    <filter id="sh" x="-20%" y="-20%" width="140%" height="150%"><feDropShadow dx="0" dy="10" stdDeviation="0" flood-color="#1E2A3A" flood-opacity="0.12"/></filter>
+  </defs>
+  <g id="bg">
+    <circle id="bg1" cx="1650" cy="180" r="260" fill="#FFE9C9"/>
+    <circle id="bg2" cx="200" cy="980" r="320" fill="#FFEED6"/>
+    <circle id="bg3" cx="1180" cy="1040" r="140" fill="#FFE3BD"/>
+    <rect id="floor" x="0" y="868" width="1920" height="212" fill="#F7E6CF"/>
+  </g>
+  <g id="logo" transform="translate(70,70)"></g>
+  <g id="stage"></g>
+  <g id="char" transform="translate(360,860)">
+    <ellipse cx="0" cy="6" rx="110" ry="16" fill="#1E2A3A" opacity="0.10"/>
+    <g id="charBody">
+      <rect x="-42" y="-160" width="32" height="160" rx="16" fill="#1E2A3A"/>
+      <rect x="10" y="-160" width="32" height="160" rx="16" fill="#1E2A3A"/>
+      <ellipse cx="-30" cy="-4" rx="30" ry="14" fill="#111827"/>
+      <ellipse cx="30" cy="-4" rx="30" ry="14" fill="#111827"/>
+      <g id="armL" transform="translate(-70,-318)"><line x1="0" y1="0" x2="0" y2="140" stroke="#139447" stroke-width="34" stroke-linecap="round"/><circle cx="0" cy="150" r="22" fill="#F2BE97"/></g>
+      <g id="armR" transform="translate(70,-318)"><line x1="0" y1="0" x2="0" y2="140" stroke="#139447" stroke-width="34" stroke-linecap="round"/><circle cx="0" cy="150" r="22" fill="#F2BE97"/></g>
+      <rect x="-82" y="-345" width="164" height="205" rx="46" fill="#16A34A"/>
+      <rect x="-48" y="-235" width="96" height="44" rx="16" fill="#139447"/>
+      <rect x="-14" y="-370" width="28" height="34" rx="10" fill="#E9AE86"/>
+      <g id="head" transform="translate(0,-440)">
+        <circle cx="-68" cy="6" r="15" fill="#E9AE86"/><circle cx="68" cy="6" r="15" fill="#E9AE86"/>
+        <circle cx="0" cy="0" r="72" fill="#F2BE97"/>
+        <path d="M -72 -6 Q -76 -82 0 -84 Q 74 -84 72 -10 Q 50 -46 14 -40 Q -30 -60 -72 -6 Z" fill="#2B2118"/>
+        <circle cx="-38" cy="24" r="12" fill="#FF9A8B" opacity="0.55"/><circle cx="38" cy="24" r="12" fill="#FF9A8B" opacity="0.55"/>
+        <g id="eyes"><ellipse cx="-25" cy="0" rx="8" ry="9" fill="#1E2A3A"/><ellipse cx="25" cy="0" rx="8" ry="9" fill="#1E2A3A"/></g>
+        <line id="browL" x1="-36" y1="-22" x2="-14" y2="-22" stroke="#2B2118" stroke-width="6" stroke-linecap="round"/>
+        <line id="browR" x1="14" y1="-22" x2="36" y2="-22" stroke="#2B2118" stroke-width="6" stroke-linecap="round"/>
+        <path id="mouth" d="" fill="none" stroke="#1E2A3A" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path id="sweat" d="M 78 -40 q 12 20 0 28 q -12 -8 0 -28 z" fill="#60A5FA" opacity="0"/>
+        <g id="thought" opacity="0"><circle cx="96" cy="-70" r="9" fill="#CBD5E1"/><circle cx="118" cy="-100" r="13" fill="#CBD5E1"/><circle cx="148" cy="-138" r="19" fill="#CBD5E1"/></g>
+      </g>
+    </g>
+  </g>
+  <circle id="wipe" cx="1270" cy="540" r="0" fill="#16A34A"/>
+</svg>
+<div id="cap"><div id="capInner"></div></div>
+
+<script>
+'use strict';
+// ════════════════════════ helpers ════════════════════════
+const $ = id => document.getElementById(id);
+const NS = 'http://www.w3.org/2000/svg';
+function mk(tag, attrs, parent) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) if (attrs[k] !== undefined && attrs[k] !== null) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const seg = (t, a, b) => (b <= a ? (t >= b ? 1 : 0) : clamp((t - a) / (b - a)));
+const lerp = (a, b, p) => a + (b - a) * p;
+const easeOut = p => 1 - Math.pow(1 - p, 3);
+const easeInOut = p => (p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2);
+const back = p => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(p - 1, 3) + c1 * Math.pow(p - 1, 2); };
+const pop = (t, a, d = 0.42) => (t < a ? 0 : back(seg(t, a, a + d)));
+function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const C = { ink: '#1E2A3A', green: '#16A34A', green2: '#22C55E', gold: '#FFC531', coral: '#FF6B5B', red: '#DC2626', sky: '#3B82F6', purple: '#8B5CF6', amber: '#F59E0B', pink: '#FF8FB1', teal: '#14B8A6', gray: '#6B7280', light: '#F3F4F6', white: '#FFFFFF' };
+
+function fmt(n, prefix = '', suffix = '') {
+  if (typeof n !== 'number' || !isFinite(n)) return String(n ?? '');
+  const abs = Math.abs(n);
+  if (!prefix && Number.isInteger(n) && n >= 1900 && n <= 2100) return String(n) + suffix;   // years
+  const digits = abs >= 100 || Number.isInteger(n) ? 0 : 1;
+  const s = abs.toLocaleString('en-US', { maximumFractionDigits: digits, minimumFractionDigits: 0 });
+  return (n < 0 ? '-' : '') + prefix + s + suffix;
+}
+
+// Animated values: round like the target (integers stay integers)
+const like = (v, target) => (Number.isInteger(Number(target)) ? Math.round(v) : Math.round(v * 10) / 10);
+
+// ── text measuring / fitting ──
+const _cv = document.createElement('canvas').getContext('2d');
+function measure(text, size, font = 'Nunito', weight = 800) {
+  _cv.font = `${font === 'Anton' ? '' : weight} ${size}px ${font}`;
+  return _cv.measureText(text).width;
+}
+function wrapLines(text, maxW, size, font, weight) {
+  const words = String(text).split(/\s+/).filter(Boolean);
+  const lines = []; let cur = '';
+  for (const w of words) {
+    const cand = cur ? cur + ' ' + w : w;
+    if (cur && measure(cand, size, font, weight) > maxW) { lines.push(cur); cur = w; } else cur = cand;
+  }
+  if (cur) lines.push(cur);
+  return lines;
+}
+// Multi-line text that shrinks until it fits maxW × maxLines. Returns {el, size, lines, height}
+function textBlock(parent, x, y, text, o = {}) {
+  const font = o.font || 'Nunito', weight = o.weight || 800;
+  let size = o.size || 60;
+  const min = o.min || 22, maxLines = o.maxLines || 2, maxW = o.maxW || 900;
+  let lines = wrapLines(text, maxW, size, font, weight);
+  while (size > min && (lines.length > maxLines || lines.some(l => measure(l, size, font, weight) > maxW))) {
+    size -= 2; lines = wrapLines(text, maxW, size, font, weight);
+  }
+  if (lines.length > maxLines) { lines = lines.slice(0, maxLines); lines[maxLines - 1] = lines[maxLines - 1].replace(/\s*\S+$/, '') + '...'; }
+  const lh = size * (o.lineH || (font === 'Anton' ? 1.08 : 1.2));
+  const anchor = o.anchor || 'middle';
+  // y is the vertical centre of the block unless o.top
+  const totalH = lh * lines.length;
+  const firstBase = o.top ? y + size * 0.85 : y - totalH / 2 + size * 0.85;
+  const el = mk('text', {
+    x, y: firstBase, 'font-size': size, 'font-weight': font === 'Anton' ? null : weight, fill: o.fill || C.ink,
+    'text-anchor': anchor, 'letter-spacing': o.ls, class: null, style: `font-family:${font}`,
+  }, parent);
+  lines.forEach((l, i) => { const ts = mk('tspan', { x, dy: i === 0 ? 0 : lh }, el); ts.textContent = o.upper ? l.toUpperCase() : l; });
+  return { el, size, lines, height: totalH, width: Math.max(...lines.map(l => measure(o.upper ? l.toUpperCase() : l, size, font, weight))) };
+}
+function txt(parent, x, y, text, o = {}) {
+  const font = o.font || 'Nunito', weight = o.weight || 800;
+  let size = o.size || 32;
+  if (o.maxW) while (size > (o.min || 16) && measure(o.upper ? String(text).toUpperCase() : text, size, font, weight) > o.maxW) size -= 1;
+  const el = mk('text', { x, y, 'font-size': size, 'font-weight': font === 'Anton' ? null : weight, fill: o.fill || C.ink, 'text-anchor': o.anchor || 'middle', 'letter-spacing': o.ls, style: `font-family:${font}` }, parent);
+  el.textContent = o.upper ? String(text).toUpperCase() : text;
+  return el;
+}
+
+// ════════════════════════ icons ════════════════════════
+// Each draws white shapes in a ~90px box centred on 0,0 (badge colour behind).
+const ICONS = {
+  house: ['#FF6B5B', (g, c) => { mk('path', { d: 'M -44 -2 L 0 -42 L 44 -2 Z', fill: '#fff' }, g); mk('rect', { x: -30, y: -4, width: 60, height: 44, rx: 4, fill: '#fff' }, g); mk('rect', { x: -9, y: 14, width: 18, height: 26, fill: c }, g); }],
+  food: ['#F59E0B', (g) => { mk('path', { d: 'M -40 -4 A 40 32 0 0 1 40 -4 Z', fill: '#fff' }, g); mk('rect', { x: -44, y: 2, width: 88, height: 12, rx: 6, fill: '#7C2D12' }, g); mk('rect', { x: -40, y: 18, width: 80, height: 17, rx: 8, fill: '#fff' }, g); }],
+  bolt: ['#3B82F6', (g) => { mk('path', { d: 'M 8 -44 L -26 6 L -2 6 L -12 44 L 26 -8 L 2 -8 Z', fill: '#fff' }, g); }],
+  bag: ['#8B5CF6', (g) => { mk('rect', { x: -32, y: -16, width: 64, height: 54, rx: 8, fill: '#fff' }, g); mk('path', { d: 'M -16 -16 V -26 a 16 16 0 0 1 32 0 V -16', stroke: '#fff', 'stroke-width': 7, fill: 'none' }, g); }],
+  piggy: ['#FF8FB1', (g, c) => { mk('ellipse', { cx: -4, cy: 4, rx: 38, ry: 28, fill: '#fff' }, g); mk('path', { d: 'M -22 -18 L -14 -36 L -4 -22 Z', fill: '#fff' }, g); mk('ellipse', { cx: 36, cy: 4, rx: 9, ry: 11, fill: '#fff' }, g); mk('rect', { x: -26, y: 26, width: 10, height: 14, rx: 4, fill: '#fff' }, g); mk('rect', { x: 10, y: 26, width: 10, height: 14, rx: 4, fill: '#fff' }, g); mk('rect', { x: -14, y: -22, width: 24, height: 6, rx: 3, fill: c }, g); mk('circle', { cx: 16, cy: -4, r: 4, fill: c }, g); }],
+  card: ['#1E2A3A', (g, c) => { mk('rect', { x: -44, y: -30, width: 88, height: 60, rx: 10, fill: '#fff' }, g); mk('rect', { x: -44, y: -16, width: 88, height: 12, fill: c }, g); mk('rect', { x: -32, y: 8, width: 26, height: 10, rx: 3, fill: '#FFC531' }, g); }],
+  bank: ['#14B8A6', (g) => { mk('path', { d: 'M -46 -16 L 0 -42 L 46 -16 Z', fill: '#fff' }, g); [-32, -12, 8, 28].forEach(x => mk('rect', { x, y: -10, width: 10, height: 36, fill: '#fff' }, g)); mk('rect', { x: -46, y: 30, width: 92, height: 10, rx: 3, fill: '#fff' }, g); }],
+  phone: ['#6366F1', (g, c) => { mk('rect', { x: -24, y: -42, width: 48, height: 84, rx: 10, fill: '#fff' }, g); mk('rect', { x: -17, y: -32, width: 34, height: 56, rx: 3, fill: c }, g); mk('circle', { cx: 0, cy: 33, r: 4, fill: c }, g); }],
+  chart: ['#16A34A', (g) => { mk('rect', { x: -38, y: 6, width: 18, height: 32, rx: 3, fill: '#fff' }, g); mk('rect', { x: -10, y: -12, width: 18, height: 50, rx: 3, fill: '#fff' }, g); mk('rect', { x: 18, y: -32, width: 18, height: 70, rx: 3, fill: '#fff' }, g); }],
+  coin: ['#F5A700', (g, c) => { mk('circle', { r: 36, fill: '#fff' }, g); mk('circle', { r: 27, fill: 'none', stroke: c, 'stroke-width': 4 }, g); txt(g, 0, 14, '$', { size: 40, weight: 900, fill: c }); }],
+  calendar: ['#EF4444', (g, c) => { mk('rect', { x: -38, y: -30, width: 76, height: 68, rx: 8, fill: '#fff' }, g); mk('rect', { x: -38, y: -30, width: 76, height: 18, rx: 6, fill: '#1E2A3A' }, g); [-22, 22].forEach(x => mk('rect', { x: x - 4, y: -42, width: 8, height: 20, rx: 4, fill: '#fff' }, g)); for (let r = 0; r < 2; r++) for (let k = 0; k < 3; k++) mk('rect', { x: -24 + k * 18, y: -2 + r * 18, width: 12, height: 12, rx: 2, fill: c }, g); }],
+  shield: ['#0EA5E9', (g, c) => { mk('path', { d: 'M 0 -44 L 36 -30 V 0 C 36 24 16 38 0 44 C -16 38 -36 24 -36 0 V -30 Z', fill: '#fff' }, g); mk('path', { d: 'M -14 0 L -3 12 L 16 -10', stroke: c, 'stroke-width': 8, fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, g); }],
+  car: ['#F97316', (g, c) => { mk('path', { d: 'M -46 12 V -2 L -30 -6 L -18 -26 H 20 L 34 -6 L 46 -2 V 12 Z', fill: '#fff' }, g); mk('path', { d: 'M -14 -20 H 0 V -6 H -24 Z M 6 -20 H 17 L 26 -6 H 6 Z', fill: c }, g); [-26, 26].forEach(x => { mk('circle', { cx: x, cy: 14, r: 12, fill: '#1E2A3A' }, g); mk('circle', { cx: x, cy: 14, r: 5, fill: '#fff' }, g); }); }],
+  health: ['#EF4444', (g) => { mk('path', { d: 'M 0 38 C -50 6 -40 -38 -12 -36 C -4 -35 0 -28 0 -24 C 0 -28 4 -35 12 -36 C 40 -38 50 6 0 38 Z', fill: '#fff' }, g); }],
+  plane: ['#0EA5E9', (g) => { mk('path', { d: 'M -46 6 L 46 -30 L 30 30 L 6 14 L -6 34 L -10 10 Z', fill: '#fff' }, g); }],
+  education: ['#6366F1', (g) => { mk('path', { d: 'M -48 -8 L 0 -30 L 48 -8 L 0 14 Z', fill: '#fff' }, g); mk('path', { d: 'M -28 4 V 24 C -10 36 10 36 28 24 V 4 L 0 18 Z', fill: '#fff' }, g); mk('path', { d: 'M 40 -4 V 22', stroke: '#fff', 'stroke-width': 5 }, g); }],
+  cart: ['#10B981', (g) => { mk('path', { d: 'M -46 -32 H -32 L -22 14 H 32 L 42 -18 H -28', stroke: '#fff', 'stroke-width': 8, fill: 'none', 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }, g); [-14, 26].forEach(x => mk('circle', { cx: x, cy: 30, r: 7, fill: '#fff' }, g)); }],
+  gift: ['#EC4899', (g, c) => { mk('rect', { x: -38, y: -12, width: 76, height: 50, rx: 6, fill: '#fff' }, g); mk('rect', { x: -44, y: -26, width: 88, height: 18, rx: 5, fill: '#fff' }, g); mk('rect', { x: -6, y: -26, width: 12, height: 64, fill: c }, g); mk('path', { d: 'M 0 -26 C -24 -50 -34 -28 0 -26 C 34 -28 24 -50 0 -26', fill: 'none', stroke: '#fff', 'stroke-width': 6 }, g); }],
+  gear: ['#64748B', (g, c) => { for (let i = 0; i < 8; i++) mk('rect', { x: -9, y: -44, width: 18, height: 22, rx: 4, fill: '#fff', transform: `rotate(${i * 45})` }, g); mk('circle', { r: 30, fill: '#fff' }, g); mk('circle', { r: 12, fill: c }, g); }],
+  target: ['#EF4444', (g, c) => { mk('circle', { r: 40, fill: '#fff' }, g); mk('circle', { r: 27, fill: c }, g); mk('circle', { r: 15, fill: '#fff' }, g); mk('circle', { r: 6, fill: c }, g); }],
+  clock: ['#8B5CF6', (g, c) => { mk('circle', { r: 40, fill: '#fff' }, g); mk('path', { d: 'M 0 -24 V 0 L 18 12', stroke: c, 'stroke-width': 7, fill: 'none', 'stroke-linecap': 'round' }, g); }],
+  warning: ['#F59E0B', (g, c) => { mk('path', { d: 'M 0 -42 L 44 36 H -44 Z', fill: '#fff', 'stroke-linejoin': 'round' }, g); mk('rect', { x: -5, y: -14, width: 10, height: 28, rx: 4, fill: c }, g); mk('circle', { cx: 0, cy: 24, r: 5.5, fill: c }, g); }],
+  check: ['#16A34A', (g) => { mk('path', { d: 'M -30 2 L -8 24 L 32 -22', stroke: '#fff', 'stroke-width': 14, fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, g); }],
+  cross: ['#EF4444', (g) => { mk('path', { d: 'M -24 -24 L 24 24 M 24 -24 L -24 24', stroke: '#fff', 'stroke-width': 14, 'stroke-linecap': 'round' }, g); }],
+  wallet: ['#8B5A2B', (g, c) => { mk('rect', { x: -44, y: -30, width: 88, height: 62, rx: 12, fill: '#fff' }, g); mk('rect', { x: 14, y: -10, width: 34, height: 24, rx: 8, fill: c }, g); mk('circle', { cx: 28, cy: 2, r: 5, fill: '#FFC531' }, g); }],
+  cash: ['#16A34A', (g, c) => { mk('rect', { x: -46, y: -26, width: 92, height: 52, rx: 8, fill: '#fff' }, g); mk('circle', { r: 15, fill: c }, g); txt(g, 0, 8, '$', { size: 22, weight: 900, fill: '#fff' }); }],
+  growth: ['#16A34A', (g) => { mk('path', { d: 'M -40 30 L -12 2 L 6 18 L 38 -16', stroke: '#fff', 'stroke-width': 10, fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, g); mk('path', { d: 'M 18 -24 H 44 V 2 Z', fill: '#fff' }, g); }],
+  decline: ['#EF4444', (g) => { mk('path', { d: 'M -40 -24 L -12 4 L 6 -12 L 38 22', stroke: '#fff', 'stroke-width': 10, fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, g); mk('path', { d: 'M 18 30 H 44 V 4 Z', fill: '#fff' }, g); }],
+  umbrella: ['#0EA5E9', (g) => { mk('path', { d: 'M -46 0 A 46 40 0 0 1 46 0 Z', fill: '#fff' }, g); mk('path', { d: 'M 0 0 V 30 A 9 9 0 0 1 -18 30', stroke: '#fff', 'stroke-width': 7, fill: 'none', 'stroke-linecap': 'round' }, g); }],
+  family: ['#F97316', (g) => { [[-26, 0, 14], [26, 0, 14], [0, 8, 10]].forEach(([x, y, r]) => { mk('circle', { cx: x, cy: y - 22, r, fill: '#fff' }, g); mk('path', { d: `M ${x - r * 1.4} ${y + 34} V ${y + 10} a ${r * 1.4} ${r * 1.4} 0 0 1 ${r * 2.8} 0 V ${y + 34} Z`, fill: '#fff' }, g); }); }],
+  laptop: ['#334155', (g, c) => { mk('rect', { x: -36, y: -32, width: 72, height: 48, rx: 6, fill: '#fff' }, g); mk('rect', { x: -28, y: -24, width: 56, height: 32, rx: 3, fill: c }, g); mk('path', { d: 'M -48 24 H 48 L 42 32 H -42 Z', fill: '#fff' }, g); }],
+  briefcase: ['#92400E', (g, c) => { mk('rect', { x: -44, y: -18, width: 88, height: 54, rx: 8, fill: '#fff' }, g); mk('path', { d: 'M -14 -18 V -30 H 14 V -18', stroke: '#fff', 'stroke-width': 7, fill: 'none' }, g); mk('rect', { x: -44, y: 2, width: 88, height: 6, fill: c }, g); }],
+  receipt: ['#64748B', (g, c) => { mk('path', { d: 'M -30 -42 H 30 V 42 L 20 34 L 10 42 L 0 34 L -10 42 L -20 34 L -30 42 Z', fill: '#fff' }, g); [-22, -6, 10].forEach(y => mk('rect', { x: -18, y, width: 36, height: 6, rx: 3, fill: c }, g)); }],
+  lock: ['#1E2A3A', (g, c) => { mk('path', { d: 'M -18 -8 V -20 a 18 18 0 0 1 36 0 V -8', stroke: '#fff', 'stroke-width': 9, fill: 'none' }, g); mk('rect', { x: -32, y: -10, width: 64, height: 48, rx: 8, fill: '#fff' }, g); mk('circle', { cx: 0, cy: 12, r: 7, fill: c }, g); }],
+  idea: ['#F5A700', (g, c) => { mk('circle', { cx: 0, cy: -10, r: 30, fill: '#fff' }, g); mk('rect', { x: -14, y: 16, width: 28, height: 20, rx: 5, fill: '#fff' }, g); mk('rect', { x: -14, y: 24, width: 28, height: 4, fill: c }, g); }],
+  percent: ['#8B5CF6', (g) => { txt(g, 0, 26, '%', { size: 80, weight: 900, fill: '#fff' }); }],
+  rocket: ['#6366F1', (g, c) => { mk('path', { d: 'M 0 -46 C 22 -26 22 10 14 26 H -14 C -22 10 -22 -26 0 -46 Z', fill: '#fff' }, g); mk('circle', { cx: 0, cy: -10, r: 9, fill: c }, g); mk('path', { d: 'M -14 8 L -30 30 L -12 26 Z M 14 8 L 30 30 L 12 26 Z', fill: '#fff' }, g); mk('path', { d: 'M -8 30 L 0 46 L 8 30 Z', fill: '#FFC531' }, g); }],
+};
+const ICON_ALIAS = { home: 'house', rent: 'house', mortgage: 'house', groceries: 'cart', shopping: 'bag', fun: 'gift', entertainment: 'gift', bills: 'bolt', utilities: 'bolt', savings: 'piggy', save: 'piggy', debt: 'card', 'credit card': 'card', loan: 'bank', invest: 'growth', investing: 'growth', stocks: 'chart', money: 'cash', salary: 'cash', paycheck: 'cash', income: 'cash', emergency: 'umbrella', insurance: 'shield', automation: 'gear', auto: 'gear', goal: 'target', time: 'clock', retirement: 'clock', medical: 'health', travel: 'plane', school: 'education', subscription: 'phone', tax: 'receipt', taxes: 'receipt', security: 'lock', tip: 'idea', interest: 'percent' };
+function iconName(n) { n = String(n || '').toLowerCase().trim(); return ICONS[n] ? n : (ICON_ALIAS[n] || 'coin'); }
+function badge(parent, name, r = 78, color) {
+  const key = iconName(name); const [col, draw] = ICONS[key];
+  const g = mk('g', {}, parent);
+  mk('circle', { r, fill: color || col }, g);
+  const inner = mk('g', { transform: `scale(${r / 78})` }, g);
+  draw(inner, color || col);
+  return g;
+}
+
+// ════════════════════════ character ════════════════════════
+function setArm(id, deg) { $(id).setAttribute('transform', `translate(${id === 'armL' ? -70 : 70},-318) rotate(${deg})`); }
+function character(gt, lt, mood, T) {
+  const p = easeOut(seg(lt, 0, 0.35));       // ease into this beat's pose
+  let L = 10, R = -10, y = Math.sin(gt * 2.4) * 4, tilt = Math.sin(gt * 1.3) * 1.5;
+  let mouth = 'M -24 30 Q 0 46 24 30', mouthFill = 'none', brows = 0, browUp = 0, sweat = 0, thought = 0;
+  switch (mood) {
+    case 'happy': mouth = 'M -28 26 Q 0 56 28 26'; y -= Math.abs(Math.sin(gt * 3)) * 6; break;
+    case 'worried': L = lerp(10, -18, p); R = lerp(-10, 18, p); mouth = 'M -20 40 Q 0 26 20 40'; brows = 1; sweat = clamp(lt * 3); break;
+    case 'thinking': R = lerp(-10, 138, p); mouth = 'M -16 36 L 18 32'; browUp = 1; thought = clamp((lt - 0.3) * 3); tilt += 3; break;
+    case 'surprised': L = lerp(10, 40, p); R = lerp(-10, -40, p); mouth = 'M -12 34 a 12 15 0 1 0 24 0 a 12 15 0 1 0 -24 0'; mouthFill = '#7A2E2E'; browUp = 2; break;
+    case 'celebrate': { const q = back(seg(lt, 0, 0.5)); L = lerp(10, 155, q) + Math.sin(gt * 9) * 8; R = lerp(-10, -155, q) - Math.sin(gt * 9) * 8; y = -Math.abs(Math.sin(lt * 5.2)) * 34; mouth = 'M -32 22 Q 0 74 32 22 Z'; mouthFill = '#7A2E2E'; browUp = 1; break; }
+    case 'pointing': R = lerp(-10, -96, p); mouth = 'M -28 26 Q 0 56 28 26'; break;
+    case 'waving': R = lerp(-10, -150, p) + Math.sin(gt * 7) * 14 * p; mouth = 'M -28 26 Q 0 56 28 26'; break;
+    case 'explaining': R = lerp(-10, -62, p) + Math.sin(gt * 2.2) * 10 * p; L = 14; mouth = Math.sin(gt * 11) > 0.2 ? 'M -20 30 Q 0 44 20 30' : 'M -22 30 Q 0 40 22 30'; break;
+    default: break;
+  }
+  setArm('armL', L); setArm('armR', R);
+  $('charBody').setAttribute('transform', `translate(0,${y}) rotate(${tilt})`);
+  const blink = [1.7, 4.9, 8.3, 11.6].some(b => (gt % 13) > b && (gt % 13) < b + 0.13);
+  $('eyes').setAttribute('transform', `scale(1,${blink ? 0.12 : 1})`);
+  $('mouth').setAttribute('d', mouth); $('mouth').setAttribute('fill', mouthFill);
+  const bu = browUp * 6;
+  $('browL').setAttribute('transform', `rotate(${brows ? -14 : 0},-25,-22) translate(0,${-bu})`);
+  $('browR').setAttribute('transform', `rotate(${brows ? 14 : 0},25,-22) translate(0,${-bu - (browUp === 1 && mood === 'thinking' ? 6 : 0)})`);
+  $('sweat').setAttribute('opacity', sweat); $('sweat').setAttribute('transform', `translate(0,${sweat ? (gt * 40) % 30 : 0})`);
+  $('thought').setAttribute('opacity', thought);
+}
+
+// ════════════════════════ layout constants ════════════════════════
+const CX = 1270;        // centre of the content area (right of the character)
+const L0 = 700, R0 = 1840;
+
+function pill(parent, x, y, text, color) {
+  const size = 30;
+  const w = measure(text, size, 'Nunito', 900) + 30 * 2 + text.length * 3;
+  const g = mk('g', { transform: `translate(${x},${y})` }, parent);
+  mk('rect', { x: -w / 2, y: -34, width: w, height: 68, rx: 34, fill: color || C.ink }, g);
+  txt(g, 0, 11, text, { size, weight: 900, fill: '#fff', ls: 3 });
+  return g;
+}
+function setPop(el, x, y, s, extra = '') { el.setAttribute('transform', `translate(${x},${y}) scale(${Math.max(0, s)}) ${extra}`); el.setAttribute('opacity', s > 0.01 ? 1 : 0); }
+
+// cue helpers
+let BEAT = null;
+function cueFor(phrase, fallback) {
+  if (!BEAT || !BEAT.words || !phrase) return fallback;
+  const stop = new Set(['the', 'and', 'for', 'your', 'you', 'with', 'into', 'from', 'that', 'this', 'are', 'per', 'of', 'a', 'an', 'to', 'in', 'on', 'my']);
+  const keys = String(phrase).toLowerCase().replace(/[^a-z0-9$%\s]/g, ' ').split(/\s+/).filter(w => w.length >= 3 && !stop.has(w));
+  for (const k of keys) {
+    const hit = BEAT.words.find(w => w.w === k || (k.length >= 5 && w.w.startsWith(k.slice(0, 5))));
+    if (hit) return hit.t;
+  }
+  const num = String(phrase).replace(/[^0-9]/g, '');
+  if (num) { const hit = BEAT.words.find(w => w.w.replace(/[^0-9]/g, '') === num); if (hit) return hit.t; }
+  return fallback;
+}
+function cues(phrases, T, start = 0.5, endFrac = 0.72) {
+  const n = phrases.length;
+  const span = Math.max(0.6, T * endFrac - start);
+  const out = phrases.map((p, i) => cueFor(p, start + (n === 1 ? 0 : span * i / (n - 1))));
+  for (let i = 0; i < n; i++) {
+    out[i] = clamp(out[i], start, Math.max(start, T - 0.9));
+    if (i > 0 && out[i] < out[i - 1] + 0.35) out[i] = out[i - 1] + 0.35;
+  }
+  return out;
+}
+
+// ════════════════════════ templates ════════════════════════
+// build(g, params, T) → update(t)
+const TEMPLATES = {
+  title(g, p, T) {
+    const ic = badge(g, p.icon || 'coin', 66);
+    const tb = textBlock(g, CX, 520, p.title || '', { font: 'Anton', size: 124, min: 60, maxLines: 3, maxW: 1060, upper: true });
+    const sub = p.subtitle ? textBlock(g, CX, 520 + tb.height / 2 + 60, p.subtitle, { size: 40, weight: 800, fill: C.gray, maxLines: 2, maxW: 960 }) : null;
+    const icY = 520 - tb.height / 2 - 110;
+    const sparks = [];
+    for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; sparks.push({ e: mk('rect', { x: -5, y: -18, width: 10, height: 36, rx: 5, fill: C.gold }, g), a }); }
+    return t => {
+      setPop(ic, CX, icY, pop(t, 0.05, 0.5), `rotate(${Math.sin(t * 2) * 8})`);
+      sparks.forEach(k => { const d = 96 + 30 * easeOut(seg(t, 0.3, 0.8)); k.e.setAttribute('transform', `translate(${CX + Math.cos(k.a) * d},${icY + Math.sin(k.a) * d}) rotate(${k.a * 180 / Math.PI + 90})`); k.e.setAttribute('opacity', seg(t, 0.3, 0.5) * (1 - seg(t, 1.0, 1.4))); });
+      tb.el.setAttribute('opacity', seg(t, 0.15, 0.5)); tb.el.setAttribute('transform', `translate(0,${(1 - easeOut(seg(t, 0.15, 0.6))) * 40})`);
+      if (sub) sub.el.setAttribute('opacity', seg(t, 0.6, 1.0));
+    };
+  },
+
+  heading(g, p, T) {
+    const kick = p.kicker ? pill(g, CX, 330, String(p.kicker).toUpperCase().slice(0, 24), C.green) : null;
+    const tb = textBlock(g, CX, p.kicker ? 410 : 300, p.title || '', { font: 'Anton', size: 132, min: 64, maxLines: 2, maxW: 1060, upper: true, top: true });
+    const barY = (p.kicker ? 410 : 300) + tb.height + 30;
+    const bar = mk('rect', { x: CX - tb.width / 2, y: barY, height: 14, rx: 7, width: 0, fill: C.gold }, g);
+    const ic = p.icon ? badge(g, p.icon, 52) : null;
+    const icX = CX + (kick ? (measure(String(p.kicker).toUpperCase(), 30, 'Nunito', 900) / 2 + 110) : 0);
+    return t => {
+      if (kick) setPop(kick, CX, 330, pop(t, 0.12));
+      tb.el.setAttribute('opacity', seg(t, 0.25, 0.55)); tb.el.setAttribute('transform', `translate(0,${(1 - easeOut(seg(t, 0.25, 0.7))) * 50})`);
+      bar.setAttribute('width', tb.width * easeInOut(seg(t, 0.6, 1.1)));
+      if (ic) setPop(ic, icX, kick ? 330 : 230, pop(t, 0.35), `rotate(${Math.sin(t * 2) * 6})`);
+    };
+  },
+
+  keyword(g, p, T) {
+    const rays = mk('g', {}, g);
+    for (let i = 0; i < 12; i++) mk('rect', { x: -8, y: -182, width: 16, height: 44, rx: 8, fill: C.gold, opacity: 0.35, transform: `rotate(${i * 30})` }, rays);
+    const ic = badge(g, p.icon || 'coin', 124);
+    // text block sits between the icon and the caption area (y ≤ 830)
+    const tb = textBlock(g, CX, 0, p.text || '', { font: 'Anton', size: 100, min: 46, maxLines: 3, maxW: 1080, upper: true, top: true });
+    const subH = p.sub ? 56 : 0;
+    const textTop = Math.min(560, 830 - tb.height - subH);
+    tb.el.setAttribute('y', textTop + tb.size * 0.85);
+    tb.el.querySelectorAll('tspan').forEach(ts => ts.setAttribute('x', CX));
+    const icY = Math.min(340, textTop - 150);
+    const sub = p.sub ? txt(g, CX, textTop + tb.height + 44, p.sub, { size: 34, weight: 800, fill: C.gray, maxW: 1000 }) : null;
+    return t => {
+      const s = pop(t, 0.1, 0.5);
+      setPop(ic, CX, icY, s, `rotate(${Math.sin(t * 2.2) * 4})`);
+      rays.setAttribute('transform', `translate(${CX},${icY}) rotate(${t * 18}) scale(${s})`);
+      tb.el.setAttribute('opacity', seg(t, 0.35, 0.65)); tb.el.setAttribute('transform', `translate(0,${(1 - easeOut(seg(t, 0.35, 0.8))) * 36})`);
+      if (sub) sub.setAttribute('opacity', seg(t, 0.8, 1.1));
+    };
+  },
+
+  counter(g, p, T) {
+    const from = Number(p.from) || 0, to = Number(p.to) || 0, up = to >= from;
+    const lab = p.label ? txt(g, CX, 300, String(p.label).toUpperCase(), { size: 36, weight: 900, fill: C.gray, ls: 3, maxW: 1000 }) : null;
+    const num = mk('text', { x: CX, y: 560, 'font-size': 220, 'text-anchor': 'middle', fill: up ? C.green : C.red, style: 'font-family:Anton' }, g);
+    const maxStr = fmt(Math.max(Math.abs(from), Math.abs(to)), p.prefix || '', p.suffix || '');
+    let size = 220; while (size > 90 && measure(maxStr, size, 'Anton') > 1000) size -= 6; num.setAttribute('font-size', size);
+    const note = p.note ? textBlock(g, CX, 680, p.note, { size: 42, weight: 800, maxLines: 2, maxW: 980 }) : null;
+    const arrow = badge(g, up ? 'growth' : 'decline', 54);
+    const c0 = cueFor(String(to), 0.4), dur = Math.min(2.6, Math.max(1, T * 0.5));
+    const start = clamp(c0 - dur * 0.6, 0.3, Math.max(0.3, T - dur - 0.6));
+    const r = rng(11); const burst = Array.from({ length: up ? 10 : 0 }, () => ({ c: badge(g, 'coin', 22 + r() * 10), a: -Math.PI / 2 + (r() - 0.5) * 2.2, v: 380 + r() * 300 }));
+    return t => {
+      if (lab) lab.setAttribute('opacity', seg(t, 0.1, 0.4));
+      const k = easeOut(seg(t, start, start + dur));
+      num.textContent = fmt(like(lerp(from, to, k), to), p.prefix || '', p.suffix || '');
+      const done = t > start + dur;
+      const bump = done ? 1 + 0.12 * Math.sin(seg(t, start + dur, start + dur + 0.3) * Math.PI) : 1;
+      num.setAttribute('transform', `translate(${CX},${560 - size * 0.35}) scale(${pop(t, 0.15) * bump}) translate(${-CX},${-(560 - size * 0.35)})`);
+      if (note) note.el.setAttribute('opacity', seg(t, start + dur, start + dur + 0.4));
+      const w = measure(maxStr, size, 'Anton');
+      setPop(arrow, CX + w / 2 + 90, 480, pop(t, start + dur * 0.5));
+      burst.forEach(b => { const dt = t - start - dur; if (dt < 0) { b.c.setAttribute('opacity', 0); return; } setPop(b.c, CX + Math.cos(b.a) * b.v * dt, 470 + Math.sin(b.a) * b.v * dt + 700 * dt * dt, 1); b.c.setAttribute('opacity', clamp(1 - (dt - 0.9) * 2)); });
+    };
+  },
+
+  stat(g, p, T) {
+    const pct = clamp(Number(p.percent) || 0, 0, 100), R = 190, cx = 980, cy = 500;
+    mk('circle', { cx, cy, r: R, fill: 'none', stroke: '#F1E4D3', 'stroke-width': 48 }, g);
+    const arc = mk('circle', { cx, cy, r: R, fill: 'none', stroke: p.color === 'red' ? C.coral : C.green, 'stroke-width': 48, 'stroke-linecap': 'round', transform: `rotate(-90 ${cx} ${cy})`, 'stroke-dasharray': `0 ${2 * Math.PI * R}` }, g);
+    const num = mk('text', { x: cx, y: cy + 40, 'font-size': 120, 'text-anchor': 'middle', fill: C.ink, style: 'font-family:Anton' }, g);
+    const lb = textBlock(g, 1530, cy, p.label || '', { size: 54, weight: 900, maxLines: 4, maxW: 520, anchor: 'middle' });
+    const c0 = cueFor(String(pct), 0.4);
+    const a = clamp(c0 - 0.6, 0.25, Math.max(0.25, T - 2)), d = 1.4;
+    return t => {
+      const k = easeOut(seg(t, a, a + d));
+      arc.setAttribute('stroke-dasharray', `${2 * Math.PI * R * pct / 100 * k} ${2 * Math.PI * R}`);
+      num.textContent = fmt(like(pct * k, pct), '', '%');
+      lb.el.setAttribute('opacity', seg(t, a + 0.3, a + 0.8));
+      lb.el.setAttribute('transform', `translate(${(1 - easeOut(seg(t, a + 0.3, a + 0.9))) * 40},0)`);
+    };
+  },
+
+  bars(g, p, T) {
+    const bars = (p.bars || []).slice(0, 12); const n = bars.length || 1;
+    const title = p.title ? txt(g, CX, 240, p.title, { size: 46, weight: 900, maxW: 1080 }) : null;
+    const x0 = 760, x1 = 1790, base = 780, maxH = 400;
+    const slot = (x1 - x0) / n, bw = Math.min(140, slot * 0.68);
+    const max = Math.max(1, ...bars.map(b => Math.abs(Number(b.value) || 0)));
+    mk('line', { x1: x0 - 20, y1: base, x2: x1 + 10, y2: base, stroke: C.ink, 'stroke-width': 6, 'stroke-linecap': 'round' }, g);
+    const valSize = n > 8 ? 26 : n > 5 ? 34 : 44;
+    const items = bars.map((b, i) => {
+      const x = x0 + slot * i + (slot - bw) / 2;
+      const hl = p.highlight === i || p.highlight === b.label;
+      const rect = mk('rect', { x, y: base, width: bw, height: 0, rx: Math.min(14, bw / 4), fill: hl ? 'url(#gGold)' : 'url(#gGreen)' }, g);
+      const v = txt(g, x + bw / 2, base, fmt(Number(b.value) || 0, p.prefix || '', p.suffix || ''), { font: 'Anton', size: valSize, fill: hl ? '#B45309' : C.ink, maxW: slot - 6 });
+      const l = txt(g, x + bw / 2, base + 46, String(b.label || ''), { size: n > 8 ? 24 : 30, weight: 900, fill: C.gray, maxW: slot - 4 });
+      return { rect, v, l, h: maxH * Math.abs(Number(b.value) || 0) / max };
+    });
+    const cs = cues(bars.map(b => b.label), T, 0.45, 0.7);
+    return t => {
+      if (title) title.setAttribute('opacity', seg(t, 0.05, 0.35));
+      items.forEach((it, i) => {
+        const k = back(seg(t, cs[i], cs[i] + 0.45));
+        const h = Math.max(0, it.h * k);
+        it.rect.setAttribute('height', h); it.rect.setAttribute('y', base - h);
+        it.v.setAttribute('y', base - h - 14); it.v.setAttribute('opacity', seg(t, cs[i] + 0.25, cs[i] + 0.45));
+        it.l.setAttribute('opacity', seg(t, cs[i] - 0.1, cs[i] + 0.1));
+      });
+    };
+  },
+
+  flow(g, p, T) {
+    const items = (p.items || []).slice(0, 4); const n = items.length;
+    const src = p.source || {}; const pre = p.prefix ?? '$';
+    const sx = 960, sy = 600;
+    const srcIcon = badge(g, src.icon || 'wallet', 110);
+    const srcLab = txt(g, sx, sy + 160, src.label || '', { size: 34, weight: 900, maxW: 380 });
+    const hasAmt = typeof src.amount === 'number' && src.amount > 0;
+    const cLab = hasAmt ? txt(g, sx, 270, String(p.counterLabel || 'LEFT').toUpperCase(), { size: 30, weight: 900, fill: C.gray, ls: 2, maxW: 420 }) : null;
+    const cNum = hasAmt ? mk('text', { x: sx, y: 390, 'font-size': 110, 'text-anchor': 'middle', fill: C.ink, style: 'font-family:Anton' }, g) : null;
+    const pos = n <= 2 ? [[1500, 420], [1500, 690]] : [[1420, 400], [1660, 400], [1420, 670], [1660, 670]];
+    const nodes = items.map((it, i) => {
+      const gi = mk('g', {}, g); badge(gi, it.icon || 'coin', n <= 2 ? 82 : 70);
+      txt(gi, 0, n <= 2 ? 122 : 110, it.label || '', { size: 30, weight: 900, maxW: 230 });
+      if (typeof it.amount === 'number') txt(gi, 0, n <= 2 ? 158 : 146, (p.outflow === false ? '+' : '-') + fmt(it.amount, pre), { size: 28, weight: 900, fill: p.outflow === false ? C.green : C.red, maxW: 230 });
+      const bill = mk('g', {}, g); mk('rect', { x: -60, y: -30, width: 120, height: 60, rx: 10, fill: C.green2, stroke: '#15803D', 'stroke-width': 4 }, bill); mk('circle', { r: 18, fill: '#15803D' }, bill); txt(bill, 0, 9, '$', { size: 26, weight: 900, fill: '#fff' });
+      return { gi, bill, x: pos[i][0], y: pos[i][1], amt: Number(it.amount) || 0 };
+    });
+    const cs = cues(items.map(i => i.label), T, 0.7, 0.75);
+    return t => {
+      setPop(srcIcon, sx, sy, pop(t, 0.1));
+      srcLab.setAttribute('opacity', seg(t, 0.3, 0.6));
+      let left = hasAmt ? src.amount : 0;
+      nodes.forEach((nd, i) => {
+        const a = cs[i], pp = seg(t, a, a + 0.6);
+        setPop(nd.gi, nd.x, nd.y, pop(t, a - 0.3) * (t > a + 0.6 && t < a + 0.9 ? 1 + 0.12 * Math.sin(seg(t, a + 0.6, a + 0.9) * Math.PI) : 1));
+        if (t < a || pp >= 1) nd.bill.setAttribute('opacity', 0);
+        else { const e = easeInOut(pp); setPop(nd.bill, lerp(sx, nd.x, e), lerp(sy - 40, nd.y, e) - Math.sin(pp * Math.PI) * 200, 1 - pp * 0.4, `rotate(${pp * 360})`); }
+        if (hasAmt) left -= nd.amt * easeOut(seg(t, a + 0.45, a + 0.85));
+      });
+      if (hasAmt) {
+        cLab.setAttribute('opacity', seg(t, 0.2, 0.5));
+        cNum.textContent = fmt(Math.max(0, Math.round(left)), pre);
+        const zero = left <= 0.5;
+        cNum.setAttribute('fill', zero ? C.red : C.ink);
+        cNum.setAttribute('opacity', seg(t, 0.25, 0.55));
+        const shake = zero ? Math.sin(t * 60) * 8 * (1 - seg(t, cs[n - 1] + 0.85, cs[n - 1] + 1.5)) : 0;
+        cNum.setAttribute('transform', `translate(${shake},0)`);
+      }
+    };
+  },
+
+  split(g, p, T) {
+    const parts = (p.parts || []).slice(0, 4); const pre = p.prefix ?? '$';
+    let sum = parts.reduce((a, x) => a + Math.max(0, Number(x.percent) || 0), 0) || 1;
+    const scale = sum > 100 ? 100 / sum : 1;
+    const total = (p.total && typeof p.total.amount === 'number') ? p.total.amount : null;
+    const W = 980, x0 = CX - W / 2, y0 = 380, H = 120;
+    const cols = ['url(#gGreen)', 'url(#gGold)', '#60A5FA', '#A78BFA'];
+    const head = txt(g, CX, 290, `${p.total && p.total.label ? p.total.label : 'Total'}${total ? '  ' + fmt(total, pre) : ''}`, { size: 44, weight: 900, maxW: 1000 });
+    const whole = mk('rect', { x: x0, y: y0, width: W, height: H, rx: 24, fill: 'url(#gGreen)' }, g);
+    let acc = 0;
+    const segs = parts.map((pt, i) => {
+      const pc = Math.max(0, Number(pt.percent) || 0) * scale;
+      const w = W * pc / 100; const x = x0 + W * acc / 100; acc += pc;
+      const hl = p.highlight === i;
+      const gs = mk('g', {}, g);
+      mk('rect', { x: 0, y: 0, width: Math.max(8, w - 8), height: H, rx: 20, fill: hl ? 'url(#gGold)' : cols[i % cols.length] }, gs);
+      if (w > 70) txt(gs, (w - 8) / 2, H / 2 + 22, `${Math.round(pc)}%`, { font: 'Anton', size: 58, fill: hl ? '#7A4D00' : '#fff', maxW: w - 20 });
+      const dest = mk('g', {}, g); badge(dest, pt.icon || (hl ? 'piggy' : 'coin'), 66);
+      txt(dest, 0, 104, pt.label || '', { size: 30, weight: 900, maxW: 260 });
+      if (total) txt(dest, 0, 140, fmt(total * pc / 100, pre), { font: 'Anton', size: 36, fill: hl ? '#B45309' : C.green, maxW: 260 });
+      return { gs, dest, x, w, pc };
+    });
+    const nP = segs.length; const destX = i => x0 + W * (i + 0.5) / nP;
+    const splitAt = clamp(cueFor('percent', 0.9), 0.6, Math.max(0.6, T - 2.2));
+    const cs = cues(parts.map(pt => pt.label), T, splitAt + 0.5, 0.8);
+    return t => {
+      head.setAttribute('opacity', seg(t, 0.1, 0.4));
+      const grow = easeOut(seg(t, 0.15, 0.6));
+      whole.setAttribute('width', W * grow); whole.setAttribute('opacity', t < splitAt ? 1 : 0);
+      segs.forEach((s, i) => {
+        const sp = easeOut(seg(t, splitAt, splitAt + 0.4));
+        const gap = (i - (nP - 1) / 2) * 26 * sp;
+        s.gs.setAttribute('transform', `translate(${s.x + gap},${y0})`); s.gs.setAttribute('opacity', t >= splitAt ? 1 : 0);
+        setPop(s.dest, destX(i), 640, pop(t, cs[i]));
+      });
+    };
+  },
+
+  compare(g, p, T) {
+    const sides = [p.left || {}, p.right || {}]; const win = p.winner === 'left' ? 0 : p.winner === 'right' ? 1 : -1;
+    const xs = [1000, 1540], w = 480, y0 = 220, h = 580;
+    const cards = sides.map((s, i) => {
+      const gc = mk('g', {}, g);
+      const box = mk('rect', { x: -w / 2, y: 0, width: w, height: h, rx: 30, fill: '#fff', stroke: 'transparent', 'stroke-width': 8, filter: 'url(#sh)' }, gc);
+      const head = mk('rect', { x: -w / 2, y: 0, width: w, height: 96, rx: 30, fill: i === 0 ? C.ink : C.green }, gc);
+      mk('rect', { x: -w / 2, y: 60, width: w, height: 36, fill: i === 0 ? C.ink : C.green }, gc);
+      txt(gc, 0, 66, s.title || (i ? 'Option B' : 'Option A'), { font: 'Anton', size: 50, fill: '#fff', maxW: w - 40, upper: true });
+      let y = 150;
+      if (s.value !== undefined && s.value !== null && s.value !== '') { txt(gc, 0, y + 52, typeof s.value === 'number' ? fmt(s.value, p.prefix || '', p.suffix || '') : String(s.value), { font: 'Anton', size: 84, fill: i === win ? C.green : C.ink, maxW: w - 40 }); y += 110; }
+      const pts = (s.points || []).slice(0, 3).map((raw, k) => {
+        const pt = typeof raw === 'object' && raw ? String(raw.text || '') : String(raw);
+        const good = typeof raw === 'object' && raw && typeof raw.good === 'boolean' ? raw.good : (win === -1 ? null : i === win ? true : null);
+        const row = mk('g', { transform: `translate(${-w / 2 + 40},${y + 20 + k * 100})` }, gc);
+        mk('circle', { cx: 20, cy: 0, r: 20, fill: good === null ? C.gray : good ? C.green : C.coral }, row);
+        mk('path', { d: good === false ? 'M 12 -8 L 28 8 M 28 -8 L 12 8' : good === null ? 'M 13 0 H 27' : 'M 11 0 L 18 8 L 30 -7', stroke: '#fff', 'stroke-width': 5, fill: 'none', 'stroke-linecap': 'round' }, row);
+        const tb = textBlock(row, 56, 0, pt, { size: 30, weight: 800, maxLines: 2, maxW: w - 120, anchor: 'start' });
+        return row;
+      });
+      return { gc, box, pts };
+    });
+    const vs = mk('g', {}, g); mk('circle', { r: 52, fill: C.gold }, vs); txt(vs, 0, 18, 'VS', { font: 'Anton', size: 52, fill: C.ink });
+    const tR = cueFor(sides[1].title, T * 0.4);
+    const appear = [0.2, clamp(tR - 0.2, 0.6, Math.max(0.6, T * 0.5))];
+    const winAt = Math.max(appear[1] + 1, T * 0.75);
+    return t => {
+      cards.forEach((c, i) => {
+        const s = pop(t, appear[i], 0.5);
+        const wb = i === win && t > winAt ? 1 + 0.05 * Math.sin(seg(t, winAt, winAt + 0.4) * Math.PI) : 1;
+        c.gc.setAttribute('transform', `translate(${xs[i]},${y0 + (1 - Math.min(1, s)) * 60}) scale(${wb})`); c.gc.setAttribute('opacity', clamp(s));
+        c.box.setAttribute('stroke', i === win && t > winAt ? C.gold : 'transparent');
+        c.pts.forEach((r, k) => r.setAttribute('opacity', seg(t, appear[i] + 0.4 + k * 0.35, appear[i] + 0.6 + k * 0.35)));
+      });
+      setPop(vs, 1270, 500, pop(t, appear[1] - 0.1));
+    };
+  },
+
+  checklist(g, p, T) {
+    const items = (p.items || []).slice(0, 5); const n = items.length;
+    const top = 200, rowH = n > 4 ? 104 : 118, h = 130 + n * rowH;
+    const card = mk('rect', { x: 760, y: top, width: 1040, height: h, rx: 30, fill: '#fff', filter: 'url(#sh)' }, g);
+    const title = txt(g, 1280, top + 82, p.title || '', { font: 'Anton', size: 58, maxW: 960, upper: true });
+    const rows = items.map((it, i) => {
+      const y = top + 150 + i * rowH;
+      const gr = mk('g', { transform: `translate(820,${y})` }, g);
+      mk('rect', { x: 0, y: -30, width: 60, height: 60, rx: 14, fill: '#F1E4D3' }, gr);
+      const ck = mk('path', { d: 'M 14 2 L 26 16 L 48 -12', stroke: '#fff', 'stroke-width': 9, fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, gr);
+      const fillBox = mk('rect', { x: 0, y: -30, width: 60, height: 60, rx: 14, fill: C.green, opacity: 0 }, gr);
+      gr.insertBefore(fillBox, ck);
+      textBlock(gr, 90, 0, it, { size: 40, weight: 800, maxLines: 2, maxW: 860, anchor: 'start', min: 26 });
+      return { gr, ck, fillBox };
+    });
+    const cs = cues(items, T, 0.6, 0.82);
+    return t => {
+      const s = easeOut(seg(t, 0.05, 0.4));
+      card.setAttribute('opacity', s); title.setAttribute('opacity', s);
+      rows.forEach((r, i) => {
+        r.gr.setAttribute('opacity', seg(t, cs[i] - 0.35, cs[i] - 0.1));
+        const k = seg(t, cs[i], cs[i] + 0.3);
+        r.fillBox.setAttribute('opacity', k);
+        r.ck.setAttribute('stroke-dasharray', `${60 * easeOut(k)} 60`);
+      });
+    };
+  },
+
+  timeline(g, p, T) {
+    const pts = (p.points || []).slice(0, 5); const n = Math.max(2, pts.length);
+    const x0 = 820, x1 = 1740, y = 560;
+    const title = p.title ? txt(g, CX, 250, p.title, { size: 46, weight: 900, maxW: 1080 }) : null;
+    mk('line', { x1: x0, y1: y, x2: x1, y2: y, stroke: '#EADBC6', 'stroke-width': 16, 'stroke-linecap': 'round' }, g);
+    const prog = mk('line', { x1: x0, y1: y, x2: x0, y2: y, stroke: C.green, 'stroke-width': 16, 'stroke-linecap': 'round' }, g);
+    const nodes = pts.map((pt, i) => {
+      const x = x0 + (x1 - x0) * i / (n - 1);
+      const gn = mk('g', {}, g);
+      mk('circle', { r: 30, fill: '#fff', stroke: C.green, 'stroke-width': 10 }, gn);
+      const v = pt.value !== undefined && pt.value !== null && pt.value !== '' ? txt(gn, 0, -64, typeof pt.value === 'number' ? fmt(pt.value, p.prefix || '', p.suffix || '') : String(pt.value), { font: 'Anton', size: n > 4 ? 48 : 58, fill: i === pts.length - 1 ? '#B45309' : C.ink, maxW: (x1 - x0) / (n - 1) + 20 }) : null;
+      textBlock(gn, 0, 88, pt.label || '', { size: 30, weight: 900, fill: C.gray, maxLines: 2, maxW: Math.min(260, (x1 - x0) / (n - 1) + 30), top: true });
+      return { gn, x };
+    });
+    const cs = cues(pts.map(pt => pt.label), T, 0.5, 0.78);
+    return t => {
+      if (title) title.setAttribute('opacity', seg(t, 0.05, 0.35));
+      let px = x0;
+      nodes.forEach((nd, i) => { const s = pop(t, cs[i]); setPop(nd.gn, nd.x, y, s); if (t >= cs[i]) px = nd.x; });
+      const prev = prog.getAttribute('x2') * 1; prog.setAttribute('x2', px);
+    };
+  },
+
+  icons(g, p, T) {
+    const items = (p.items || []).slice(0, 4); const n = items.length || 1;
+    const title = p.title ? txt(g, CX, 250, p.title, { font: 'Anton', size: 64, maxW: 1080, upper: true }) : null;
+    const slot = 1080 / n;
+    const nodes = items.map((it, i) => {
+      const gi = mk('g', {}, g); badge(gi, it.icon || 'coin', n > 3 ? 90 : 105);
+      textBlock(gi, 0, n > 3 ? 130 : 150, it.label || '', { size: 36, weight: 900, maxLines: 2, maxW: slot - 30, top: true });
+      return { gi, x: CX - 540 + slot * (i + 0.5) };
+    });
+    const cs = cues(items.map(i => i.label), T, 0.4, 0.75);
+    return t => {
+      if (title) title.setAttribute('opacity', seg(t, 0.05, 0.35));
+      nodes.forEach((nd, i) => setPop(nd.gi, nd.x, 500 + Math.sin(t * 2 + i) * 6, pop(t, cs[i])));
+    };
+  },
+
+  outro(g, p, T) {
+    const btn = mk('g', {}, g);
+    const bg = mk('rect', { x: -260, y: -64, width: 520, height: 128, rx: 26, fill: '#EF4444' }, btn);
+    const label = txt(btn, 0, 26, 'SUBSCRIBE', { font: 'Anton', size: 74, fill: '#fff' });
+    const bell = mk('g', {}, g); mk('path', { d: 'M -34 20 C -34 -30 -22 -44 0 -46 C 22 -44 34 -30 34 20 L 44 32 H -44 Z', fill: C.gold }, bell); mk('circle', { cx: 0, cy: 42, r: 10, fill: C.gold }, bell);
+    const cursor = mk('path', { d: 'M 0 0 L 0 56 L 14 42 L 24 66 L 34 62 L 24 38 L 44 38 Z', fill: '#fff', stroke: C.ink, 'stroke-width': 5, 'stroke-linejoin': 'round' }, g);
+    const tb = textBlock(g, CX, 720, p.text || 'More money tips every week', { size: 46, weight: 900, maxLines: 2, maxW: 1000 });
+    const click = Math.min(1.6, T * 0.4);
+    return t => {
+      const pressed = t > click;
+      bg.setAttribute('fill', pressed ? '#9CA3AF' : '#EF4444');
+      label.textContent = pressed ? 'SUBSCRIBED' : 'SUBSCRIBE';
+      const press = t > click && t < click + 0.15 ? 0.94 : 1;
+      setPop(btn, CX, 450, pop(t, 0.1) * press);
+      setPop(bell, CX + 360, 450, pop(t, click + 0.2), `rotate(${t > click + 0.2 ? Math.sin(t * 22) * 16 * (1 - seg(t, click + 0.2, click + 1.4)) : 0})`);
+      const cp = easeInOut(seg(t, 0.4, click));
+      cursor.setAttribute('transform', `translate(${lerp(1700, CX + 120, cp)},${lerp(800, 470, cp)}) scale(${press})`);
+      cursor.setAttribute('opacity', seg(t, 0.3, 0.5) * (1 - seg(t, click + 0.8, click + 1.1)));
+      tb.el.setAttribute('opacity', seg(t, click + 0.3, click + 0.7));
+    };
+  },
+};
+TEMPLATES.thumbnail = null;   // separate entry point below
+
+// ════════════════════════ runtime ════════════════════════
+let update = null, CAPS = [];
+function buildLogo(brand) {
+  const g = $('logo'); g.innerHTML = '';
+  mk('circle', { cx: 26, cy: 26, r: 26, fill: C.gold }, g); txt(g, 26, 37, '$', { size: 30, weight: 900, fill: '#8A5A00' });
+  const m = String(brand).match(/^([A-Z]?[a-z]+)(.*)$/);
+  const t = mk('text', { x: 66, y: 37, 'font-size': 30, 'font-weight': 900, fill: C.ink }, g);
+  t.textContent = m ? m[1] : brand;
+  if (m && m[2]) { const s = mk('tspan', { fill: C.green }, t); s.textContent = m[2]; }
+}
+
+function setBeat(beat) {
+  BEAT = beat;
+  const stage = $('stage'); stage.innerHTML = '';
+  buildLogo(beat.brand || 'WealthSutra');
+  const root = mk('g', { id: 'content' }, stage);
+  if (beat.kicker) root._pill = pill(root, CX, 120, String(beat.kicker).toUpperCase().slice(0, 28), beat.kickerColor || C.ink);
+  const tpl = TEMPLATES[beat.template] || TEMPLATES.keyword;
+  try { update = tpl(mk('g', {}, root), beat.params || {}, beat.T); }
+  catch (e) { console.error('template failed', beat.template, e); stage.innerHTML = ''; const r2 = mk('g', { id: 'content' }, stage); update = TEMPLATES.keyword(mk('g', {}, r2), { text: beat.fallbackText || '', icon: 'coin' }, beat.T); }
+  CAPS = beat.captions || [];
+}
+
+function render(lt) {
+  const b = BEAT, gt = b.start + lt, T = b.T;
+  $('bg1').setAttribute('cx', 1650 + Math.sin(gt * 0.3) * 30);
+  $('bg2').setAttribute('cy', 980 + Math.cos(gt * 0.25) * 20);
+  update(lt);
+  const content = $('content');
+  const inA = easeOut(seg(lt, 0, 0.3)), outA = b.wipeOut ? 1 : 1 - seg(lt, T - 0.2, T);
+  content.setAttribute('opacity', Math.min(inA, outA));
+  content.setAttribute('transform', `translate(0,${(1 - inA) * 18})`);
+  if (content._pill) content._pill.setAttribute('transform', `translate(${CX},120) scale(${pop(lt, 0.05, 0.35)})`);
+  character(gt, lt, b.mood || 'neutral', T);
+  // circle wipe into/out of headings
+  let r = 0;
+  if (b.wipeIn && lt < 0.28) r = 1500 * (1 - easeInOut(seg(lt, 0, 0.28)));
+  if (b.wipeOut && lt > T - 0.25) r = 1500 * easeInOut(seg(lt, T - 0.25, T));
+  $('wipe').setAttribute('r', r);
+  // captions (global time)
+  const cap = CAPS.find(c => gt >= c.a && gt < c.b);
+  const ci = $('capInner');
+  if (cap) {
+    ci.style.visibility = 'visible';
+    ci.innerHTML = cap.html;
+    ci.style.transform = `scale(${0.86 + 0.14 * back(seg(gt, cap.a, cap.a + 0.18))})`;
+  } else ci.style.visibility = 'hidden';
+}
+
+// Thumbnail (1280×720): character + big text + icon
+function renderThumbnail(o) {
+  document.body.classList.add('thumb');
+  const svg = $('s'); svg.setAttribute('viewBox', '0 0 1920 1080'); svg.setAttribute('width', 1280); svg.setAttribute('height', 720);
+  buildLogo(o.brand || 'WealthSutra');
+  const stage = $('stage'); stage.innerHTML = '';
+  const g = mk('g', {}, stage);
+  const rays = mk('g', { transform: 'translate(1360,560)' }, g);
+  for (let i = 0; i < 16; i++) mk('rect', { x: -14, y: -900, width: 28, height: 520, fill: C.gold, opacity: 0.18, transform: `rotate(${i * 22.5})` }, rays);
+  const tb = textBlock(g, 1220, 470, o.text || '', { font: 'Anton', size: 230, min: 110, maxLines: 3, maxW: 1150, upper: true, fill: C.ink, lineH: 1.02 });
+  // gold highlight on numbers
+  tb.el.querySelectorAll('tspan').forEach(ts => { if (/\d/.test(ts.textContent)) ts.setAttribute('fill', C.green); });
+  if (o.icon) { const ic = badge(g, o.icon, 120); ic.setAttribute('transform', `translate(1760,170) rotate(10)`); }
+  BEAT = { start: 0, T: 1, words: [] };
+  character(1.2, 1, o.mood || 'surprised', 1);
+  $('char').setAttribute('transform', 'translate(380,1010) scale(1.32)');
+  $('floor').setAttribute('opacity', 0);
+  $('cap').style.display = 'none';
+}
+
+window.setBeat = setBeat;
+window.render = render;
+window.renderThumbnail = renderThumbnail;
+window.TEMPLATE_NAMES = Object.keys(TEMPLATES).filter(k => TEMPLATES[k]);
+window.ICON_NAMES = Object.keys(ICONS);
+</script>
+</body></html>

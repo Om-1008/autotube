@@ -15,11 +15,15 @@ as a GitHub Actions artifact for 14 days.
 
 1. **Generate Now** (or the daily cron) → the API server researches a topic and writes the script, reporting each step live.
 2. You **approve** → the API server triggers the `Render video` workflow on GitHub.
-3. The workflow (4 CPUs / 16 GB, free for public repos) renders a 1080p video:
-   - Microsoft neural voice via `edge-tts`, one clip per sentence (Google TTS as fallback)
-   - Pixabay stock footage chosen per scene (Claude turns each `[B-ROLL: …]` cue into search terms), a new shot every ~5.5 s with a slow pan
-   - Burned-in captions synced to the voice, an intro title card, section headings and an end card
-   - A custom thumbnail
+3. The workflow (4 CPUs / 16 GB, free for public repos) produces a 2D animated explainer:
+   - Kokoro neural voice (open-source, offline), one clip per sentence so everything syncs to the words
+     (Microsoft edge-tts and Google TTS are fallbacks)
+   - Claude storyboards the narration into ~45 animated beats using 13 templates — title, section heading,
+     key idea, counter, stat ring, bar chart, money flow, percentage split, comparison, checklist,
+     timeline, icon group, subscribe outro — with the WealthSutra character reacting on the left
+   - Every number on screen is checked against the narration; invented figures are dropped
+   - Frames are drawn in headless Chromium (parallel pages), captions are burned in, plus a custom thumbnail
+   - `VISUAL_STYLE=footage` switches back to Pixabay stock footage
 4. It uploads to YouTube and reports back; the dashboard shows each stage as it happens.
 
 ## Setup checklist
@@ -37,13 +41,16 @@ as a GitHub Actions artifact for 14 days.
 Without `GH_DISPATCH_TOKEN` the server renders in-process instead (fine locally, far too slow on Render's free tier).
 
 ### GitHub → repo Settings → Secrets and variables → Actions
-Secrets: `UPSTASH_REDIS_URL`, `UPSTASH_REDIS_TOKEN`, `PIXABAY_API_KEY`, `ANTHROPIC_API_KEY`,
-`YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`, `YOUTUBE_REDIRECT_URI`.
+Secrets: `UPSTASH_REDIS_URL`, `UPSTASH_REDIS_TOKEN`, `ANTHROPIC_API_KEY`,
+`YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`, `YOUTUBE_REDIRECT_URI`
+(`PIXABAY_API_KEY` only for `VISUAL_STYLE=footage`).
 
-Optional variables: `TTS_VOICE` (default `en-US-AndrewNeural`; e.g. `en-US-AvaNeural`, `en-US-BrianNeural`),
+Optional variables: `TTS_ENGINE` (`kokoro` default, or `edge`), `KOKORO_VOICE` (default `am_michael`; e.g. `af_heart`, `am_adam`, `bf_emma`),
+`TTS_VOICE` (Microsoft voice when `TTS_ENGINE=edge`, default `en-US-AndrewNeural`), `CHANNEL_NAME` (logo text, default `WealthSutra`),
+`VISUAL_STYLE` (`animated` default, or `footage`),
 `YOUTUBE_PRIVACY` (`public` by default; set `unlisted` or `private` to review on YouTube first),
 `YOUTUBE_AI_LABEL` (`true` to tick YouTube's "altered or synthetic content" box on every upload; off by default),
-`OUTPUT_HEIGHT` (`1440` by default; `1080` renders faster).
+`OUTPUT_HEIGHT` (footage style, `1440` default), `OUTPUT_HEIGHT_ANIMATED` (`1080` default).
 
 ### YouTube
 Visit `https://<render-app>/auth/youtube` once and approve. Tokens are stored in Redis and refresh automatically.

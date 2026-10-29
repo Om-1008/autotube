@@ -11,3 +11,4 @@ frontend/node_modules/
 .DS_Store
 backend/jobstate/
 backend/work/
+__pycache__/

@@ -19,6 +19,7 @@
     "googleapis": "^188.0.0",
     "node-cron": "^3.0.3",
     "nodemailer": "^6.9.14",
+    "playwright-core": "1.63.0",
     "uuid": "^10.0.0"
   },
   "devDependencies": {

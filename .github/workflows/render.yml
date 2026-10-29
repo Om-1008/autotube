@@ -31,10 +31,14 @@ jobs:
       YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
       YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
       YOUTUBE_REDIRECT_URI: ${{ secrets.YOUTUBE_REDIRECT_URI }}
+      TTS_ENGINE: ${{ vars.TTS_ENGINE }}
       TTS_VOICE: ${{ vars.TTS_VOICE }}
+      KOKORO_VOICE: ${{ vars.KOKORO_VOICE }}
       YOUTUBE_PRIVACY: ${{ vars.YOUTUBE_PRIVACY }}
       YOUTUBE_AI_LABEL: ${{ vars.YOUTUBE_AI_LABEL }}
       OUTPUT_HEIGHT: ${{ vars.OUTPUT_HEIGHT }}
+      VISUAL_STYLE: ${{ vars.VISUAL_STYLE }}
+      CHANNEL_NAME: ${{ vars.CHANNEL_NAME }}
     defaults:
       run:
         working-directory: backend
@@ -59,15 +63,24 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install ffmpeg and neural voice
+      - name: Cache Kokoro voice model
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/kokoro
+          key: kokoro-model-v1.0-fp32
+
+      - name: Install ffmpeg and neural voices
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg > /dev/null
-          pip install --quiet edge-tts==7.3.1
+          pip install --quiet edge-tts==7.3.1 kokoro-onnx==0.6.1 soundfile==0.14.0
           ffmpeg -version | head -1
 
       - name: Install dependencies
         run: npm ci --omit=dev --no-audit --no-fund
+
+      - name: Install headless Chromium (for the animation renderer)
+        run: npx playwright-core install --with-deps chromium
 
       - name: Render and upload
         env:

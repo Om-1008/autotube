@@ -17,8 +17,8 @@ const STAGES = {
   render: [
     { key: 'queued', label: 'Starting render server' },
     { key: 'voiceover', label: 'Recording voiceover' },
-    { key: 'footage', label: 'Finding stock footage' },
-    { key: 'rendering', label: 'Editing video & captions' },
+    { key: 'visuals', label: 'Planning the visuals' },
+    { key: 'rendering', label: 'Animating video & captions' },
     { key: 'uploading', label: 'Uploading to YouTube' },
   ],
 };

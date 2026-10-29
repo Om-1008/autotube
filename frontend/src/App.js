@@ -14,14 +14,15 @@ const STATUS_CONFIG = {
   queued:           { label: '🖥️ Starting render',    color: '#3b82f6', bg: '#eff6ff' },
   voiceover:        { label: '🎙️ Recording voice',    color: '#3b82f6', bg: '#eff6ff' },
   footage:          { label: '🎞️ Finding footage',    color: '#3b82f6', bg: '#eff6ff' },
-  rendering:        { label: '🎬 Editing video',      color: '#3b82f6', bg: '#eff6ff' },
+  visuals:          { label: '🎨 Planning visuals',    color: '#3b82f6', bg: '#eff6ff' },
+  rendering:        { label: '🎬 Animating video',    color: '#3b82f6', bg: '#eff6ff' },
   uploading:        { label: '📤 Uploading',          color: '#8b5cf6', bg: '#f5f3ff' },
   rendered:         { label: '📦 Rendered',           color: '#0f766e', bg: '#f0fdfa' },
   uploaded:         { label: '🎉 Live on YouTube',    color: '#059669', bg: '#d1fae5' },
   rejected:         { label: '❌ Rejected',           color: '#ef4444', bg: '#fef2f2' },
   error:            { label: '⚠️ Error',              color: '#dc2626', bg: '#fef2f2' },
 };
-const ACTIVE = new Set(['generating', 'researching', 'writing', 'finalizing', 'approved', 'queued', 'voiceover', 'footage', 'rendering', 'uploading']);
+const ACTIVE = new Set(['generating', 'researching', 'writing', 'finalizing', 'approved', 'queued', 'voiceover', 'footage', 'visuals', 'rendering', 'uploading']);
 const isActive = (v) => ACTIVE.has(v.status);
 
 function StatusBadge({ status }) {

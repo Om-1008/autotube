@@ -75,18 +75,49 @@ async function synthesize(scenes, workDir, reporter) {
   const dir = path.join(workDir, 'tts');
   fs.mkdirSync(dir, { recursive: true });
 
-  let engine = process.env.TTS_ENGINE || '';
-  if (!engine) engine = (await has('edge-tts', ['--help'])) ? 'edge' : 'google';
-  reporter.log(`Voice engine: ${engine === 'edge' ? `Microsoft neural voice (${VOICE})` : engine === 'google' ? 'Google TTS (fallback)' : 'placeholder'}`);
+  let engine = (process.env.TTS_ENGINE || '').toLowerCase();
+  if (!engine) {
+    if (await has('python3', ['-c', 'import kokoro_onnx, soundfile'])) engine = 'kokoro';
+    else if (await has('edge-tts', ['--help'])) engine = 'edge';
+    else engine = 'google';
+  }
+  const names = { kokoro: `Kokoro neural voice (${process.env.KOKORO_VOICE || 'am_michael'})`, edge: `Microsoft neural voice (${VOICE})`, google: 'Google TTS (fallback)', test: 'placeholder' };
+  reporter.log(`Voice engine: ${names[engine] || engine}`);
 
   const items = [];
   scenes.forEach((s, si) => s.sentences.forEach((text, ti) => items.push({ si, ti, text })));
+
+  // Kokoro: one batch process (model loads once), then convert like the others
+  if (engine === 'kokoro') {
+    const jobs = items.map((it, i) => ({ text: it.text, out: path.join(dir, `k${String(i).padStart(4, '0')}.wav`) }));
+    fs.writeFileSync(path.join(dir, 'kokoro_jobs.json'), JSON.stringify(jobs));
+    try {
+      await run('python3', [path.join(__dirname, 'kokoro_tts.py'), path.join(dir, 'kokoro_jobs.json')], {
+        timeoutMs: 40 * 60 * 1000,
+        onStdout: (out) => {
+          const m = out.match(/PROGRESS (\d+) (\d+)\s*$/m);
+          if (m) reporter.progress((+m[1] / +m[2]) * 100, `Sentence ${m[1]} of ${m[2]}`);
+        },
+      });
+      items.forEach((it, i) => { it.kokoroWav = jobs[i].out; });
+    } catch (e) {
+      reporter.log(`⚠️ Kokoro voice failed (${e.message.slice(0, 120)}) — falling back`);
+      engine = (await has('edge-tts', ['--help'])) ? 'edge' : 'google';
+    }
+  }
 
   let done = 0;
   let fellBack = 0;
   const results = await pool(items, engine === 'google' ? 1 : 6, async (it, i) => {
     const mp3 = path.join(dir, `s${String(i).padStart(4, '0')}.mp3`);
     const wav = mp3.replace(/\.mp3$/, '.wav');
+    if (it.kokoroWav) {
+      await ffmpeg(['-i', it.kokoroWav, '-ar', String(SAMPLE_RATE), '-ac', '1', '-c:a', 'pcm_s16le', wav]);
+      const d0 = await duration(wav);
+      done++;
+      if (engine !== 'kokoro') reporter.progress((done / items.length) * 100, `Sentence ${done} of ${items.length}`);
+      return { ...it, wav, d: d0 };
+    }
     if (engine === 'edge') {
       try { await edgeTTS(it.text, mp3); }
       catch (e) { fellBack++; await googleTTS(it.text, mp3); }
