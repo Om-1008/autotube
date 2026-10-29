@@ -64,15 +64,25 @@ Respond with ONLY valid JSON (no markdown, no explanation):
   "title": "YouTube video title (under 70 chars, includes year 2026)",
   "hook": "First 30 seconds hook sentence — the problem the viewer has",
   "searchKeywords": ["keyword1", "keyword2", "keyword3"],
-  "whyNow": "One sentence why this topic is relevant right now",
-  "affiliateAngle": "Which affiliate product fits (e.g. Groww for stock investing topics)"
+  "whyNow": "One sentence why this topic is relevant right now"
 }`,
     }],
   });
   return parseJSON(msg.content[0].text);
 }
 
-async function writeScript(topic, niche, audience) {
+// Real links the channel owner configured (Settings → affiliateLinks: [{ name, url }])
+function validLinks(settings) {
+  return (settings.affiliateLinks || []).filter(l => l && l.name && /^https?:\/\//.test(l.url || ''));
+}
+
+function linkRules(links) {
+  return links.length
+    ? `- Around the last third, briefly and honestly mention these tools we have links for: ${links.map(l => l.name).join(', ')}. Say the links are in the description. Never claim we personally use them or that they are sponsors.`
+    : `- Do NOT mention links, "the description", sponsors, affiliates, or promo codes — there are none. Describe tools generically (e.g. "a high-yield savings account", "a round-up app") rather than naming brands, and never claim we personally use a product.`;
+}
+
+async function writeScript(topic, niche, audience, links = []) {
   const scriptMsg = await anthropic.messages.create({
     model: 'claude-haiku-4-5',
     max_tokens: 4000,
@@ -83,12 +93,13 @@ async function writeScript(topic, niche, audience) {
 Write a complete, engaging voiceover script for this video:
 Title: ${topic.title}
 Hook concept: ${topic.hook}
-Affiliate angle: ${topic.affiliateAngle}
 
 Requirements:
 - 1150-1350 words of narration (8-10 minutes at 135 words/minute)
 - Conversational, no jargon, like explaining to a friend; short punchy sentences
-- Structure: Hook → Problem → 3-5 concrete steps → natural affiliate mention → call to action
+- Structure: Hook → Problem → 3-5 concrete steps → recap → call to action
+${linkRules(links)}
+- Only state facts and statistics you are confident are accurate; prefer "many people" over invented precise numbers
 - Begin each step/section with an on-screen heading line in this exact form: "## Step N: <short step title>" (max 5 words after the colon, specific to this video). Don't add a heading for the hook.
 - Before every 2-4 sentences of narration, add a footage cue in this exact form: [B-ROLL: concrete visual description] (e.g. [B-ROLL: woman checking banking app on phone])
 - Write numbers the way they should be spoken on screen ($1,000, 50%)
@@ -102,7 +113,7 @@ Output ONLY the script.`,
   return { scriptText, wordCount: scriptText.replace(/\[[^\]]*\]/g, '').split(/\s+/).filter(Boolean).length };
 }
 
-async function writeMetadata(topic, niche, audience) {
+async function writeMetadata(topic, niche, audience, scriptText = '') {
   const metaMsg = await anthropic.messages.create({
     model: 'claude-haiku-4-5',
     max_tokens: 700,
@@ -110,6 +121,11 @@ async function writeMetadata(topic, niche, audience) {
       role: 'user',
       content: `For a YouTube video titled: "${topic.title}"
 About: ${niche} for ${audience} audience.
+Script summary (first part): ${scriptText.replace(/\[[^\]]*\]|#+\s/g, ' ').slice(0, 1200)}
+
+Rules for the description: 2-3 short paragraphs, under 150 words, keywords included naturally.
+Do NOT include timestamps or chapters (they are added automatically from the real video),
+links or URLs, emojis-only lines, or claims that we personally use or are sponsored by any product.
 
 Respond with ONLY valid JSON (no markdown):
 {
@@ -163,11 +179,12 @@ async function runPipeline(existingJobId = null) {
       await db.update(d => { const v = d.videos.find(x => x.id === jobId); if (v) { v.title = topic.title; v.topic = topic; } });
 
       await r.stage('writing', 'Claude is drafting ~1,300 words');
-      const { scriptText, wordCount } = await writeScript(topic, niche, audience);
+      const links = validLinks(data.settings);
+      const { scriptText, wordCount } = await writeScript(topic, niche, audience, links);
       r.log(`Script written: ${wordCount.toLocaleString()} words (~${Math.round(wordCount / 135)} min)`);
 
       await r.stage('finalizing', 'Description, tags and thumbnail ideas');
-      const meta = await writeMetadata(topic, niche, audience);
+      const meta = await writeMetadata(topic, niche, audience, scriptText);
 
       await db.update(d => {
         const v = d.videos.find(x => x.id === jobId);
@@ -415,8 +432,18 @@ app.get('/channel/stats', async (req, res) => {
 
 app.get('/settings', (req, res) => res.json(db.get().settings));
 
+const SETTINGS_KEYS = ['niche', 'audience', 'frequencyDays', 'publishHour', 'isRunning', 'affiliateLinks'];
+
 app.patch('/settings', async (req, res) => {
-  await db.update(d => { Object.assign(d.settings, req.body); });
+  const patch = {};
+  for (const k of SETTINGS_KEYS) if (k in (req.body || {})) patch[k] = req.body[k];
+  if ('affiliateLinks' in patch) {
+    patch.affiliateLinks = (Array.isArray(patch.affiliateLinks) ? patch.affiliateLinks : [])
+      .map(l => ({ name: String(l.name || '').trim().slice(0, 60), url: String(l.url || '').trim().slice(0, 500) }))
+      .filter(l => l.name && /^https?:\/\//.test(l.url))
+      .slice(0, 10);
+  }
+  await db.update(d => { Object.assign(d.settings, patch); });
   res.json(db.get().settings);
 });
 

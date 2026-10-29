@@ -361,6 +361,53 @@ function VideoCard({ video, onOpenScript, onRetry, onDelete }) {
   );
 }
 
+// ─── Settings modal ───────────────────────────────────────────────────────────
+function SettingsModal({ settings, onClose, onSave }) {
+  const [text, setText] = useState(
+    (settings.affiliateLinks || []).map(l => `${l.name} | ${l.url}`).join('\n')
+  );
+  const [saving, setSaving] = useState(false);
+  const parsed = text.split('\n').map(l => l.trim()).filter(Boolean).map(l => {
+    const [name, ...rest] = l.split('|');
+    return { name: (name || '').trim(), url: rest.join('|').trim() };
+  });
+  const invalid = parsed.filter(l => !l.name || !/^https?:\/\//.test(l.url));
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+      onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 620, padding: 24, boxShadow: '0 25px 60px rgba(0,0,0,0.3)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h2 style={{ margin: 0, fontSize: 19, color: '#1a1a2e' }}>⚙️ Settings</h2>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: '#888' }}>×</button>
+        </div>
+        <h3 style={{ fontSize: 14, margin: '18px 0 4px', color: '#1a1a2e' }}>Links for video descriptions</h3>
+        <p style={{ margin: '0 0 10px', fontSize: 13, color: '#666', lineHeight: 1.5 }}>
+          One per line as <code>Name | https://link</code>. When this is empty, scripts never mention
+          “links in the description”. When it has links, new scripts may mention these tools and the
+          links are added to every description with an affiliate disclosure.
+        </p>
+        <textarea value={text} onChange={e => setText(e.target.value)} rows={6}
+          placeholder={'Wise | https://wise.com/invite/...\nRevolut | https://revolut.com/referral/...'}
+          style={{ width: '100%', borderRadius: 10, border: '1px solid #ddd', padding: 12, fontSize: 13, fontFamily: 'ui-monospace, Menlo, monospace', resize: 'vertical' }} />
+        {invalid.length > 0 && (
+          <div style={{ color: '#b91c1c', fontSize: 12, marginTop: 6 }}>
+            {invalid.length} line(s) need the form “Name | https://…”
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: 10, marginTop: 16, justifyContent: 'flex-end' }}>
+          <button onClick={onClose} style={btn('#f3f4f6', '#555')}>Cancel</button>
+          <button disabled={saving || invalid.length > 0} onClick={async () => {
+            setSaving(true); await onSave({ affiliateLinks: parsed }); setSaving(false); onClose();
+          }} style={{ ...btn('linear-gradient(135deg, #6c63ff, #4f46e5)'), opacity: invalid.length ? 0.5 : 1 }}>
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main App ──────────────────────────────────────────────────────────────────
 const FILTERS = [
   { key: 'all', label: 'All' },
@@ -385,6 +432,7 @@ export default function App() {
   const [starting, setStarting] = useState(false);
   const [filter, setFilter] = useState('all');
   const [apiError, setApiError] = useState(null);
+  const [showSettings, setShowSettings] = useState(false);
   const [toast, setToast] = useState(() => (window.location.search.includes('youtube=connected') ? '✅ YouTube channel connected' : null));
 
   const fetchData = useCallback(async () => {
@@ -440,6 +488,12 @@ export default function App() {
     await fetchData();
   }
 
+  async function saveSettings(patch) {
+    await fetch(`${API}/settings`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) });
+    setToast('✅ Settings saved');
+    await fetchData();
+  }
+
   async function triggerPipeline() {
     setStarting(true);
     setFilter('all');
@@ -475,6 +529,11 @@ export default function App() {
             {health?.settings?.niche ? health.settings.niche.replace(/\b\w/g, c => c.toUpperCase()) : 'Personal Finance'} · Next video: <strong style={{ color: '#a5b4fc' }}>{nextRun}</strong>
           </p>
         </div>
+        <div style={{ display: 'flex', gap: 10 }}>
+        <button onClick={() => setShowSettings(true)} disabled={!health} style={{
+          background: 'rgba(255,255,255,0.1)', color: '#fff', border: '1px solid rgba(255,255,255,0.2)',
+          borderRadius: 10, padding: '10px 14px', fontSize: 14, fontWeight: 600, cursor: 'pointer',
+        }}>⚙️ Settings</button>
         <button onClick={triggerPipeline} disabled={starting || generatingNow} style={{
           background: starting || generatingNow ? '#4b5563' : 'linear-gradient(135deg, #6c63ff, #4f46e5)',
           color: '#fff', border: 'none', borderRadius: 10, padding: '10px 20px', fontSize: 14, fontWeight: 700,
@@ -483,6 +542,7 @@ export default function App() {
           {(starting || generatingNow) && <span className="at-spinner" style={{ borderColor: '#9ca3af', borderTopColor: '#fff' }} />}
           {starting ? 'Starting…' : generatingNow ? 'Generating script…' : '⚡ Generate Now'}
         </button>
+        </div>
       </div>
 
       {toast && (
@@ -534,6 +594,10 @@ export default function App() {
           <VideoCard key={v.id} video={v} onOpenScript={openScript} onRetry={retryVideo} onDelete={deleteVideo} />
         ))}
       </div>
+
+      {showSettings && health?.settings && (
+        <SettingsModal settings={health.settings} onClose={() => setShowSettings(false)} onSave={saveSettings} />
+      )}
 
       {selectedVideo && (
         <ScriptModal video={selectedVideo} onClose={() => setSelectedVideo(null)} onApprove={approveVideo} onReject={rejectVideo} />

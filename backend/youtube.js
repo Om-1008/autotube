@@ -71,17 +71,39 @@ async function isYouTubeConnected() {
   return !!(await loadTokens());
 }
 
+function fmtTime(sec) {
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
 function buildDescription(scriptData) {
-  return [
-    scriptData.description || '',
+  // Drop any timestamp/chapter lines Claude may have written — real ones are added below
+  const body = String(scriptData.description || '')
+    .split('\n')
+    .filter(l => !/^\s*\W*\s*(timestamps?|chapters?)\s*:?\s*$/i.test(l) && !/^\s*\d{1,2}:\d{2}\b/.test(l))
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  const parts = [body];
+  const links = scriptData.links || [];
+  if (links.length) {
+    parts.push('', '🔗 LINKS', ...links.map(l => `${l.name}: ${l.url}`),
+      '(Some of these may be affiliate links — I may earn a small commission at no extra cost to you.)');
+  }
+  const chapters = scriptData.chapters || [];
+  if (chapters.length >= 3) {
+    parts.push('', 'CHAPTERS', ...chapters.map(c => `${fmtTime(c.t)} ${c.title}`));
+  }
+  parts.push(
     '',
     '---------------------------------',
-    'DISCLOSURE: This video was created with AI assistance.',
-    'Information is for educational purposes only. Not financial advice.',
+    'This video was produced with AI assistance (script and narration).',
+    'Information is for educational purposes only — not financial advice.',
     'Always consult a qualified financial advisor before investing.',
-    '',
-    '#personalfinance #money #investing #financialfreedom',
-  ].join('\n');
+  );
+  return parts.join('\n').slice(0, 4900);
 }
 
 // Upload a rendered MP4. Does not touch the DB — caller records the result.

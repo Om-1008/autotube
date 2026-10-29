@@ -15,6 +15,18 @@ const W = Math.round((H * 16) / 9);
 const FPS = 30;
 const SHOT_SECONDS = 5.5;
 
+// YouTube chapters from the real heading times: first at 0:00, at least 3, each >= 10s
+function buildChapters(scenes, plan, starts, total) {
+  const list = [{ t: 0, title: 'Intro' }];
+  scenes.forEach((s, i) => {
+    const heading = s.heading || (plan.scenes[i] && plan.scenes[i].heading) || '';
+    if (!heading || i === 0) return;
+    const t = Math.floor(starts[i]);
+    if (t - list[list.length - 1].t >= 10 && total - t >= 10) list.push({ t, title: heading.slice(0, 60) });
+  });
+  return list.length >= 3 ? list : [];
+}
+
 async function processJob(job, reporter, { workDir, upload = true } = {}) {
   fs.mkdirSync(workDir, { recursive: true });
   fs.cpSync(path.join(__dirname, 'fonts'), path.join(workDir, 'fonts'), { recursive: true });
@@ -38,6 +50,8 @@ async function processJob(job, reporter, { workDir, upload = true } = {}) {
   // ── 2. Footage ────────────────────────────────────────────────────────────
   await reporter.stage('footage', `Planning ${shotsPerScene.reduce((a, b) => a + b, 0)} shots`);
   const plan = await planScenes(scenes, { title, niche, reporter });
+  const chapters = buildChapters(scenes, plan, starts, tts.totalDuration);
+  if (chapters.length) reporter.log(`Chapters: ${chapters.map(c => c.title).join(' · ')}`);
   const footage = await gatherFootage(scenes, plan, shotsPerScene, { workDir, niche, reporter });
 
   // ── 3. Cut shots ──────────────────────────────────────────────────────────
@@ -124,7 +138,8 @@ async function processJob(job, reporter, { workDir, upload = true } = {}) {
     return { outPath, thumbPath, stats };
   }
   await reporter.stage('uploading', `${sizeMB} MB`);
-  const { videoId, videoUrl, thumbnailSet } = await yt.uploadVideo(outPath, { ...job.script, title }, {
+  const links = ((job.settings && job.settings.affiliateLinks) || []).filter(l => l && l.name && /^https?:\/\//.test(l.url || ''));
+  const { videoId, videoUrl, thumbnailSet } = await yt.uploadVideo(outPath, { ...job.script, title, chapters, links }, {
     thumbnailPath: fs.existsSync(thumbPath) ? thumbPath : null,
     onProgress: p => reporter.progress(p, `Uploaded ${p}%`),
   });
