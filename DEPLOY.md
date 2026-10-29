@@ -41,7 +41,9 @@ Secrets: `UPSTASH_REDIS_URL`, `UPSTASH_REDIS_TOKEN`, `PIXABAY_API_KEY`, `ANTHROP
 `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`, `YOUTUBE_REDIRECT_URI`.
 
 Optional variables: `TTS_VOICE` (default `en-US-AndrewNeural`; e.g. `en-US-AvaNeural`, `en-US-BrianNeural`),
-`YOUTUBE_PRIVACY` (`public` by default; set `unlisted` or `private` to review on YouTube first).
+`YOUTUBE_PRIVACY` (`public` by default; set `unlisted` or `private` to review on YouTube first),
+`YOUTUBE_AI_LABEL` (`true` to tick YouTube's "altered or synthetic content" box on every upload; off by default),
+`OUTPUT_HEIGHT` (`1440` by default; `1080` renders faster).
 
 ### YouTube
 Visit `https://<render-app>/auth/youtube` once and approve. Tokens are stored in Redis and refresh automatically.

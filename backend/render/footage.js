@@ -87,8 +87,9 @@ async function searchPixabay(query) {
       .filter(h => h.duration >= 4)
       .map(h => {
         const v = h.videos || {};
-        const pick = [v.large, v.medium, v.small].find(r => r && r.url && r.width >= 1280 && r.width <= 1920 && (!r.size || r.size < 60e6))
-          || [v.medium, v.large, v.small].find(r => r && r.url);
+        // Sharpest rendition that's still a reasonable download; never below 1280px wide
+        const ok = r => r && r.url && r.width >= 1280 && (!r.size || r.size < 90e6);
+        const pick = [v.large, v.medium, v.small].filter(ok).sort((a, b) => b.width - a.width)[0];
         return pick ? { id: h.id, url: pick.url, width: pick.width, duration: h.duration, tags: h.tags } : null;
       })
       .filter(Boolean);

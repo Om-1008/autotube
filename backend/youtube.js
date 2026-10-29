@@ -110,7 +110,10 @@ async function uploadVideo(videoPath, scriptData, { onProgress, thumbnailPath } 
       status: {
         privacyStatus: process.env.YOUTUBE_PRIVACY || 'public',
         selfDeclaredMadeForKids: false,
-        containsSyntheticMedia: true,
+        // YouTube's "Altered or synthetic content" label. Required for realistic AI depictions of
+        // real people/places/events — not for a generic narrator voice over real stock footage.
+        // Set YOUTUBE_AI_LABEL=true (GitHub repo variable) to always apply it.
+        containsSyntheticMedia: process.env.YOUTUBE_AI_LABEL === 'true',
       },
     },
     media: { mimeType: 'video/mp4', body: fs.createReadStream(videoPath) },

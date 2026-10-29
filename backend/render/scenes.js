@@ -16,14 +16,19 @@ function cleanHeading(s) {
     .trim();
 }
 
+const TIMESTAMP = /[([]?\s*\b\d{1,2}:\d{2}\s*(?:-|–|—|to)\s*\d{1,2}:\d{2}\b\s*[)\]]?|[([]\s*\d{1,2}:\d{2}\s*[)\]]/g;   // ranges, or a time in ( ) / [ ]
+
 function cleanNarration(s) {
   return s
+    .replace(TIMESTAMP, ' ')
+    .replace(/\(\s*\)/g, ' ')
     .replace(/\[PAUSE\]/gi, ' ')
     .replace(/\[[^\]]*\]/g, ' ')                 // any other bracket annotation
     .replace(/^\s*(narrator|vo|voiceover|host)\s*:\s*/i, '')
     .replace(/[*_#`~|\\^]/g, '')
     .replace(/[“”]/g, '"').replace(/[‘’]/g, "'")
     .replace(/\s+/g, ' ')
+    .replace(/\s+([,.!?;:])/g, '$1')
     .trim();
 }
 
@@ -81,6 +86,14 @@ function parseScript(script, videoTitle = '') {
         if (h) tokens.push({ type: 'heading', text: h });
         continue;
       }
+    }
+
+    // Leading bold label followed by narration on the same line
+    const inlineLabel = line.match(/^\*\*([^*]{2,80})\*\*\s*:?\s*(.+)$/);
+    if (inlineLabel && inlineLabel[1].split(/\s+/).length <= 10 && !/\[B-ROLL:/i.test(inlineLabel[1])) {
+      const h = cleanHeading(inlineLabel[1].replace(/:$/, ''));
+      if (h) tokens.push({ type: 'heading', text: h });
+      line = inlineLabel[2];
     }
 
     // Inline B-ROLL markers, in order

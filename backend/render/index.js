@@ -8,8 +8,10 @@ const { planScenes, gatherFootage } = require('./footage');
 const { buildASS, buildThumbASS } = require('./captions');
 const { ffmpeg, ffmpegWithProgress, pool } = require('./proc');
 
-const W = 1920;
-const H = 1080;
+// 1440p output: YouTube serves 1440p+ uploads with its higher-quality codec (VP9/AV1),
+// which looks noticeably sharper than a 1080p upload even for 1080p viewers.
+const H = parseInt(process.env.OUTPUT_HEIGHT || '1440', 10);
+const W = Math.round((H * 16) / 9);
 const FPS = 30;
 const SHOT_SECONDS = 5.5;
 
@@ -68,8 +70,8 @@ async function processJob(job, reporter, { workDir, upload = true } = {}) {
     await ffmpeg([
       '-ss', offset.toFixed(2), '-stream_loop', '-1', '-i', shot.clip.file,
       '-frames:v', String(shot.frames),
-      '-vf', `scale=${Math.round(W * 1.06)}:${Math.round(H * 1.06)}:force_original_aspect_ratio=increase,crop=${W}:${H}:x='${dir}':y='(ih-oh)/2',setsar=1,fps=${FPS},eq=saturation=1.08,format=yuv420p`,
-      '-an', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '19', '-r', String(FPS), shot.file,
+      '-vf', `scale=${Math.round(W * 1.05)}:${Math.round(H * 1.05)}:force_original_aspect_ratio=increase:flags=lanczos,crop=${W}:${H}:x='${dir}':y='(ih-oh)/2',setsar=1,fps=${FPS},eq=saturation=1.08,format=yuv420p`,
+      '-an', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '15', '-r', String(FPS), shot.file,
     ]);
     cut++;
     reporter.progress((cut / shots.length) * 30, `Cut shot ${cut} of ${shots.length}`);
@@ -87,7 +89,7 @@ async function processJob(job, reporter, { workDir, upload = true } = {}) {
     '-i', 'voiceover.wav',
     '-filter_complex', '[0:v]ass=captions.ass:fontsdir=fonts[v];[1:a]loudnorm=I=-15:TP=-1.5:LRA=11,aresample=48000[a]',
     '-map', '[v]', '-map', '[a]',
-    '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '21', '-pix_fmt', 'yuv420p', '-r', String(FPS),
+    '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '17', '-profile:v', 'high', '-pix_fmt', 'yuv420p', '-r', String(FPS), '-g', String(FPS * 2),
     '-c:a', 'aac', '-b:a', '160k', '-shortest', '-movflags', '+faststart',
     'final.mp4',
   ], tts.totalDuration, p => reporter.progress(30 + p * 0.65, `Encoding video ${Math.round(p)}%`), { cwd: workDir })
