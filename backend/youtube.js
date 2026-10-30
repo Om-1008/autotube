@@ -96,13 +96,18 @@ function buildDescription(scriptData) {
   if (chapters.length >= 3) {
     parts.push('', 'CHAPTERS', ...chapters.map(c => `${fmtTime(c.t)} ${c.title}`));
   }
-  parts.push(
-    '',
-    '---------------------------------',
-    'This video was produced with AI assistance (script and narration).',
-    'Information is for educational purposes only — not financial advice.',
-    'Always consult a qualified financial advisor before investing.',
-  );
+  if (scriptData.kids) {
+    if (scriptData.moral) parts.push('', `🌟 सीख: ${scriptData.moral}`);
+    parts.push('', '---------------------------------', 'Animated with AI assistance (story and voices).');
+  } else {
+    parts.push(
+      '',
+      '---------------------------------',
+      'This video was produced with AI assistance (script and narration).',
+      'Information is for educational purposes only — not financial advice.',
+      'Always consult a qualified financial advisor before investing.',
+    );
+  }
   return parts.join('\n').slice(0, 4900);
 }
 
@@ -114,8 +119,9 @@ async function uploadVideo(videoPath, scriptData, { onProgress, thumbnailPath } 
   const auth = await getAuthenticatedClient();
   const youtube = google.youtube({ version: 'v3', auth });
   const fileSize = fs.statSync(videoPath).size;
+  const kids = !!scriptData.kids;
   const tags = [...(scriptData.tags || []),
-    'personal finance', 'money', 'investing', 'financial freedom', 'finance tips', '2026']
+    ...(kids ? ['hindi kahani', 'bachon ki kahani', 'panchatantra', 'moral stories', 'हिंदी कहानियाँ'] : ['personal finance', 'money', 'investing', 'financial freedom', 'finance tips', '2026'])]
     .filter((t, i, a) => t && a.indexOf(t) === i).slice(0, 30);
 
   const res = await youtube.videos.insert({
@@ -125,13 +131,14 @@ async function uploadVideo(videoPath, scriptData, { onProgress, thumbnailPath } 
         title: (scriptData.title || 'Personal finance').slice(0, 100),
         description: buildDescription(scriptData),
         tags,
-        categoryId: '27',
-        defaultLanguage: 'en',
-        defaultAudioLanguage: 'en',
+        categoryId: kids ? '1' : '27',
+        defaultLanguage: kids ? 'hi' : 'en',
+        defaultAudioLanguage: kids ? 'hi' : 'en',
       },
       status: {
         privacyStatus: process.env.YOUTUBE_PRIVACY || 'public',
-        selfDeclaredMadeForKids: false,
+        // Children's content must be declared "made for kids" (COPPA)
+        selfDeclaredMadeForKids: kids,
         // YouTube's "Altered or synthetic content" label. Required for realistic AI depictions of
         // real people/places/events — not for a generic narrator voice over real stock footage.
         // Set YOUTUBE_AI_LABEL=true (GitHub repo variable) to always apply it.

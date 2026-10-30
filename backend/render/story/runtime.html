@@ -1,0 +1,606 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+@font-face { font-family: Baloo; src: url(../fonts/Baloo2.ttf); font-weight: 400 800; }
+html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: #8fd3ff; }
+svg { position: absolute; inset: 0; }
+text { font-family: Baloo; }
+#cap { position: absolute; left: 0; right: 0; bottom: 54px; display: flex; justify-content: center; pointer-events: none; }
+#capIn { font-family: Baloo; font-weight: 800; font-size: 62px; line-height: 1.2; color: #fff; background: rgba(62, 39, 18, 0.88);
+  padding: 6px 42px 12px; border-radius: 30px; border: 5px solid #FFD54F; box-shadow: 0 10px 0 rgba(0,0,0,0.18);
+  max-width: 1500px; text-align: center; visibility: hidden; transform-origin: 50% 100%; }
+</style></head>
+<body>
+<svg id="svg" width="1920" height="1080" viewBox="0 0 1920 1080" xmlns="http://www.w3.org/2000/svg">
+  <g id="world"></g>
+  <g id="screen">
+    <rect id="tint" x="0" y="0" width="1920" height="1080" fill="#1A0F2E" opacity="0"/>
+    <g id="bubbles"></g>
+    <g id="question"></g>
+    <g id="moral"></g>
+    <g id="ending"></g>
+    <g id="title"></g>
+    <g id="brand"></g>
+    <path id="iris" fill="#2D1B4E" fill-rule="evenodd" d=""/>
+  </g>
+</svg>
+<div id="cap"><div id="capIn"></div></div>
+<script src="cast.js"></script>
+<script src="backgrounds.js"></script>
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+const { SPECIES, mk } = CAST;
+const { BACKGROUNDS, defs } = STORY_BG;
+const FPS = 30;
+const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, p) => a + (b - a) * p;
+const seg = (t, a, b) => clamp((t - a) / (b - a));
+const ease = p => (p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2);
+const easeOut = p => 1 - Math.pow(1 - p, 3);
+const back = p => { const c = 1.70158; return 1 + (c + 1) * Math.pow(p - 1, 3) + c * Math.pow(p - 1, 2); };
+const pop = (t, t0, d = 0.45) => (t < t0 ? 0 : back(seg(t, t0, t0 + d)));
+const hash = s => { let h = 7; for (const c of s) h = (h * 31 + c.charCodeAt(0)) % 9973; return h / 9973; };
+const COLORS = ['#E65100', '#2E7D32', '#1565C0', '#AD1457', '#6A1B9A', '#00838F', '#C62828'];
+const BASE_SCALE = 1.15;
+const MOVE = { left: 420, center: 960, right: 1500 };
+const SLOTS = { 1: [960], 2: [690, 1230], 3: [500, 960, 1420] };
+const RIVER_SLOTS = { 1: [600], 2: [380, 780], 3: [260, 560, 840] };
+
+let D = null;        // data
+let SC = [];         // scenes
+let END = null;      // ending scene
+let ready = false;
+
+// ───────────────────────── text helpers ─────────────────────────
+function measure(text, size, weight = 800) {
+  const t = mk('text', { x: -9999, y: -9999, 'font-size': size, 'font-weight': weight }, $('svg'));
+  t.textContent = text; const w = t.getComputedTextLength(); t.remove(); return w;
+}
+function wrap(text, size, maxW, maxLines = 3) {
+  const words = text.split(/\s+/).filter(Boolean); const lines = []; let cur = '';
+  for (const w of words) { const nx = cur ? cur + ' ' + w : w; if (measure(nx, size) > maxW && cur) { lines.push(cur); cur = w; } else cur = nx; }
+  if (cur) lines.push(cur);
+  if (lines.length > maxLines) { const rest = lines.splice(maxLines - 1).join(' '); lines.push(rest); }
+  return lines;
+}
+function textLines(g, lines, size, attrs) {
+  const t = mk('text', { 'font-size': size, 'font-weight': 800, 'text-anchor': 'middle', ...attrs }, g);
+  lines.forEach((l, i) => { const s = mk('tspan', { x: attrs.x || 0, dy: i ? size * 1.18 : 0 }, t); s.textContent = l; });
+  return t;
+}
+
+// ───────────────────────── items (for "give") ─────────────────────────
+function drawItem(g, item) {
+  const E = (tag, a) => mk(tag, a, g);
+  switch (item) {
+    case 'carrot': E('path', { d: 'M -10 -30 L 10 -30 L 0 34 Z', fill: '#FB8C00' }); E('path', { d: 'M 0 -30 l -12 -18 M 0 -30 l 0 -22 M 0 -30 l 12 -18', stroke: '#43A047', 'stroke-width': 6, 'stroke-linecap': 'round' }); break;
+    case 'jamun': E('ellipse', { rx: 20, ry: 25, fill: '#5E1A8C', stroke: '#3A0F57', 'stroke-width': 4 }); E('ellipse', { cx: -6, cy: -8, rx: 5, ry: 7, fill: '#CE93D8' }); break;
+    case 'roti': E('circle', { r: 30, fill: '#E8C27A', stroke: '#C08A3E', 'stroke-width': 4 }); [[-10, -6], [8, 8], [12, -12]].forEach(([x, y]) => E('circle', { cx: x, cy: y, r: 4, fill: '#A0682A' })); break;
+    case 'water': E('path', { d: 'M 0 -32 C 18 -6 24 8 24 14 A 24 24 0 0 1 -24 14 C -24 8 -18 -6 0 -32 Z', fill: '#4FC3F7', stroke: '#0277BD', 'stroke-width': 4 }); break;
+    case 'stone': E('ellipse', { rx: 26, ry: 18, fill: '#9E9E9E', stroke: '#616161', 'stroke-width': 4 }); break;
+    case 'cheese': E('path', { d: 'M -28 18 L 28 18 L 28 -8 L -28 -22 Z', fill: '#FFD54F', stroke: '#F9A825', 'stroke-width': 4 }); E('circle', { cx: 6, cy: 4, r: 5, fill: '#F9A825' }); break;
+    case 'gift': E('rect', { x: -26, y: -22, width: 52, height: 44, rx: 6, fill: '#E91E63' }); E('rect', { x: -6, y: -22, width: 12, height: 44, fill: '#FFEB3B' }); E('path', { d: 'M 0 -22 c -14 -18 -26 -6 -14 0 M 0 -22 c 14 -18 26 -6 14 0', stroke: '#FFEB3B', 'stroke-width': 6, fill: 'none' }); break;
+    case 'flower': for (let i = 0; i < 6; i++) E('circle', { cx: Math.cos(i * 1.047) * 16, cy: Math.sin(i * 1.047) * 16, r: 12, fill: '#FF80AB' }); E('circle', { r: 10, fill: '#FFD740' }); break;
+    case 'honey': E('rect', { x: -22, y: -18, width: 44, height: 46, rx: 10, fill: '#FFB300', stroke: '#E65100', 'stroke-width': 4 }); E('rect', { x: -26, y: -28, width: 52, height: 14, rx: 6, fill: '#8D6E63' }); break;
+    default: E('circle', { r: 26, fill: '#E53935', stroke: '#B71C1C', 'stroke-width': 4 }); E('path', { d: 'M 0 -26 q 4 -14 14 -16', stroke: '#2E7D32', 'stroke-width': 5, fill: 'none' }); E('ellipse', { cx: -8, cy: -8, rx: 6, ry: 9, fill: '#FF8A80' });
+  }
+}
+
+// ───────────────────────── per-character effects ─────────────────────────
+function buildFx(parent) {
+  const g = mk('g', {}, parent);
+  const F = { g };
+  F.tears = [0, 1].map(() => mk('path', { d: 'M 0 -12 C 8 0 10 6 0 12 C -10 6 -8 0 0 -12 Z', fill: '#4FC3F7', opacity: 0 }, g));
+  F.zzz = [0, 1, 2].map(i => { const t = mk('text', { 'font-size': 44 + i * 10, 'font-weight': 800, fill: '#fff', stroke: '#3949AB', 'stroke-width': 3, 'paint-order': 'stroke', opacity: 0 }, g); t.textContent = 'Z'; return t; });
+  F.q = mk('text', { 'font-size': 96, 'font-weight': 800, fill: '#FFEB3B', stroke: '#5D3A1A', 'stroke-width': 6, 'paint-order': 'stroke', 'text-anchor': 'middle', opacity: 0 }, g); F.q.textContent = '?';
+  F.ex = mk('text', { 'font-size': 110, 'font-weight': 800, fill: '#FF5252', stroke: '#fff', 'stroke-width': 7, 'paint-order': 'stroke', 'text-anchor': 'middle', opacity: 0 }, g); F.ex.textContent = '!';
+  F.steam = [0, 1].map(() => mk('circle', { r: 20, fill: '#ECEFF1', opacity: 0 }, g));
+  F.sweat = mk('path', { d: 'M 0 -16 C 10 0 12 8 0 16 C -12 8 -10 0 0 -16 Z', fill: '#81D4FA', stroke: '#0288D1', 'stroke-width': 3, opacity: 0 }, g);
+  F.haha = mk('text', { 'font-size': 64, 'font-weight': 800, fill: '#FF6F00', stroke: '#fff', 'stroke-width': 7, 'paint-order': 'stroke', 'text-anchor': 'middle', opacity: 0 }, g); F.haha.textContent = 'हा हा!';
+  F.stars = Array.from({ length: 5 }, (_, i) => mk('path', { d: 'M 0 -20 L 6 -6 L 20 0 L 6 6 L 0 20 L -6 6 L -20 0 L -6 -6 Z', fill: i % 2 ? '#FFF59D' : '#FFD740', opacity: 0 }, g));
+  F.dust = Array.from({ length: 4 }, () => mk('circle', { r: 16, fill: '#E0C9A6', opacity: 0 }, g));
+  return F;
+}
+function hideFx(F) { [...F.tears, ...F.zzz, F.q, F.ex, ...F.steam, F.sweat, F.haha, ...F.stars, ...F.dust].forEach(e => e.setAttribute('opacity', 0)); }
+function show(e, o, x, y, extra = '') { e.setAttribute('opacity', o); e.setAttribute('transform', `translate(${x},${y}) ${extra}`); }
+
+// ───────────────────────── scene planning ─────────────────────────
+const EMO_OF = { cry: 'crying', laugh: 'laughing', angry: 'angry', scared: 'scared', celebrate: 'happy', think: 'thinking', sleep: 'sleepy', wake: 'surprised', fall: 'surprised', jump: 'happy', wave: 'happy' };
+const POSE_OF = { celebrate: 'celebrate', wave: 'wave', point: 'point', think: 'think', cry: 'sad', laugh: 'laugh', angry: 'angry', scared: 'scared', give: 'give' };
+
+function planScene(si, sc, lines, from, to) {
+  const g = mk('g', { style: 'display:none' }, $('world'));
+  const bgG = mk('g', {}, g);
+  const bg = BACKGROUNDS[sc.background].build(bgG);
+  const charG = mk('g', {}, g);
+  let waterFront = null;
+  if (bg.water) waterFront = mk('path', { d: '', fill: '#0288D1', opacity: 0.93 }, g);
+  const itemG = mk('g', {}, g);
+  const fxG = mk('g', {}, g);
+  const S = { si, g, bg, from, to, chars: {}, gives: [], lines, waterFront, itemG, cams: [] };
+  const ids = sc.characters;
+  const land = ids.filter(id => D.castById[id].species !== 'crocodile');
+  const slots = bg.water ? RIVER_SLOTS[Math.max(1, land.length)] : SLOTS[Math.max(1, ids.length)];
+  let li = 0;
+  ids.forEach((id, k) => {
+    const c = D.castById[id];
+    const sp = SPECIES[c.species];
+    const croc = c.species === 'crocodile';
+    const root = mk('g', {}, charG);
+    const holder = mk('g', {}, root);
+    const rig = sp.build(holder);
+    const slot = croc ? 1480 : (bg.water ? slots[li++] : slots[k]);
+    const firstAct = sc.beats.flatMap(b => b.actions || []).find(a => a.who === id);
+    const enters = firstAct && firstAct.do === 'enter';
+    const fromSide = firstAct && firstAct.from === 'right' ? 'right' : (firstAct && firstAct.from === 'left' ? 'left' : (slot > 960 ? 'right' : 'left'));
+    S.chars[id] = {
+      id, c, rig, root, croc, scale: BASE_SCALE * (sp.scale || 1) * (croc ? 1.05 : 1), slot,
+      y: croc ? (bg.water.y + 62) : bg.groundY,
+      x0: enters ? (croc ? 1480 : (fromSide === 'right' ? 2350 : -450)) : slot,
+      visFrom: enters ? 1e9 : -Infinity, visTo: Infinity,
+      enterRise: croc && enters, moves: [], poses: [], ems: [{ t: -1e9, em: 'happy' }], jumps: [], falls: [], fly: [], color: COLORS[D.cast.indexOf(c) % COLORS.length],
+      fx: buildFx(fxG), blinkSeed: hash(id) * 4,
+    };
+  });
+  // walk the beats
+  const posAt = (ch, t) => xAt(ch, t);
+  // keep a comfortable gap from everyone else on screen (no animals standing inside each other)
+  const free = (ch, x1, t0, cur) => {
+    const maxX = bg.water && !ch.croc ? 900 : 1760;
+    for (let pass = 0; pass < 4; pass++) Object.values(S.chars).forEach(o => {
+      if (o === ch || o.croc !== ch.croc || o.visFrom > t0 + 1.5 || o.visTo <= t0) return;
+      const ox = posAt(o, t0 + 2); const gap = 165 * (o.scale + ch.scale) / BASE_SCALE;
+      if (Math.abs(x1 - ox) < gap) {
+        let nx = ox + (cur <= ox ? -gap : gap);
+        if (nx < 160 || nx > maxX) nx = ox + (cur <= ox ? gap : -gap);
+        x1 = clamp(nx, 160, maxX);
+      }
+    });
+    return x1;
+  };
+  sc.beats.forEach((b, bi) => {
+    const l = lines[bi]; if (!l) return;
+    const t0 = l.start, t1 = Math.max(l.end, l.start + 1.4);
+    if (b.speaker !== 'narrator' && b.emotion && S.chars[b.speaker]) S.chars[b.speaker].ems.push({ t: t0, em: b.emotion });
+    (b.actions || []).forEach(a => {
+      const ch = S.chars[a.who]; if (!ch) return;
+      const cur = posAt(ch, t0 + 0.05);
+      if (EMO_OF[a.do]) ch.ems.push({ t: t0, em: EMO_OF[a.do] });
+      if (a.do === 'laugh') ch.ems.push({ t: t1 + 0.2, em: 'happy' });
+      if (POSE_OF[a.do]) ch.poses.push({ t0, t1: a.do === 'give' ? t0 + 1.2 : t1 + 0.2, pose: POSE_OF[a.do] });
+      if (a.do === 'enter') {
+        ch.visFrom = Math.min(ch.visFrom, t0);
+        if (ch.croc) { ch.riseAt = t0; }
+        else { const x1 = free(ch, ch.slot, t0, ch.x0); ch.moves.push({ t0: t0 + 0.05, t1: t0 + 1.25, x0: ch.x0, x1, pose: 'run' }); }
+      } else if (a.do === 'exit') {
+        const side = a.to === 'right' || a.to === 'left' ? a.to : (cur > 960 ? 'right' : 'left');
+        if (ch.croc) { ch.sinkAt = t0 + 0.2; ch.visTo = t0 + 1.4; }
+        else { ch.moves.push({ t0: t0 + 0.1, t1: t0 + 1.4, x0: cur, x1: side === 'right' ? 2450 : -550, pose: 'run' }); ch.visTo = t0 + 1.4; }
+      } else if (a.do === 'walk_to' || a.do === 'run_to') {
+        let x1;
+        if (MOVE[a.to] !== undefined) x1 = MOVE[a.to];
+        else if (S.chars[a.to]) { const ox = posAt(S.chars[a.to], t0); x1 = ox + (cur < ox ? -260 : 260); }
+        else x1 = cur + 300;
+        if (ch.croc) x1 = clamp(x1, 1300, 1900); else if (bg.water) x1 = Math.min(x1, 900);
+        x1 = clamp(x1, 180, 1740);
+        x1 = free(ch, x1, t0, cur);
+        const run = a.do === 'run_to'; const dur = Math.max(run ? 0.55 : 0.9, Math.abs(x1 - cur) / (run ? 900 : 420));
+        if (Math.abs(x1 - cur) > 10) ch.moves.push({ t0: t0 + 0.05, t1: t0 + 0.05 + dur, x0: cur, x1, pose: ch.croc ? 'idle' : (run ? 'run' : 'walk') });
+      } else if (a.do === 'jump') ch.jumps.push(t0 + 0.1);
+      else if (a.do === 'fall') ch.falls.push(t0 + 0.15);
+      else if (a.do === 'fly') ch.fly.push({ t: t0, on: true });
+      else if (a.do === 'land') ch.fly.push({ t: t0, on: false });
+      else if (a.do === 'sleep') ch.poses.push({ t0, t1: Infinity, pose: 'sleep', sleep: true });
+      else if (a.do === 'wake') ch.poses.forEach(p => { if (p.sleep && p.t1 === Infinity) p.t1 = t0; });
+      if (a.do === 'give' && S.chars[a.to]) S.gives.push({ t: t0 + 0.35, from: a.who, to: a.to, item: a.item || 'fruit', g: (() => { const ig = mk('g', { opacity: 0 }, itemG); drawItem(ig, a.item || 'fruit'); return ig; })() });
+    });
+  });
+  // characters that never enter explicitly are there from the start; ones that speak before entering appear when they speak
+  Object.values(S.chars).forEach(ch => { if (ch.visFrom === 1e9) ch.visFrom = -Infinity; });
+  // camera keyframes per beat
+  S.cams.push({ t: from, x: 960, y: 540, s: 1 });
+  sc.beats.forEach((b, bi) => {
+    const l = lines[bi]; if (!l) return;
+    const tt = l.start + 0.8;
+    const vis = Object.values(S.chars).filter(ch => tt >= ch.visFrom && tt < ch.visTo);
+    let cam;
+    if (b.question || !vis.length) cam = { x: 960, y: 540, s: 1 };
+    else if (b.speaker !== 'narrator' && S.chars[b.speaker] && vis.includes(S.chars[b.speaker])) {
+      const sp = S.chars[b.speaker]; const sx = xAt(sp, tt);
+      const others = vis.filter(v => v !== sp).map(v => xAt(v, tt));
+      const near = others.length ? others.reduce((a, x) => (Math.abs(x - sx) < Math.abs(a - sx) ? x : a)) : sx;
+      const s = Math.abs(near - sx) > 700 ? 1.18 : 1.3;
+      cam = { x: lerp(sx, near, 0.3), s };
+      cam.y = 880 - 0.36 * 1080 / s;
+    } else {
+      const xs = vis.map(v => xAt(v, tt)); const mn = Math.min(...xs) - 330, mx = Math.max(...xs) + 330;
+      const s = clamp(1920 / (mx - mn), 1, 1.18); cam = { x: (mn + mx) / 2, s, y: 880 - 0.34 * 1080 / s };
+    }
+    S.cams.push({ t: l.start - 0.2, ...cam });
+  });
+  S.cams.forEach((k, i) => { k.from = i ? camEval(S.cams[i - 1], k.t) : { x: k.x, y: k.y, s: k.s }; });
+  return S;
+}
+
+function camEval(k, t) { const p = ease(seg(t, k.t, k.t + 0.9)); return { x: lerp(k.from.x, k.x, p), y: lerp(k.from.y, k.y, p), s: lerp(k.from.s, k.s, p) }; }
+function camAt(S, t) {
+  let k = S.cams[0]; for (const c of S.cams) { if (c.t <= t) k = c; else break; }
+  const c = camEval(k, t);
+  const s = c.s; let x = c.x + Math.sin(t * 0.35) * 10, y = c.y;
+  x = clamp(x, -560 + 960 / s, 2480 - 960 / s); y = clamp(y, -460 + 540 / s, 1560 - 540 / s);
+  return { x, y, s };
+}
+
+function xAt(ch, t) {
+  let x = ch.x0;
+  for (const m of ch.moves) { if (t < m.t0) break; x = t >= m.t1 ? m.x1 : lerp(m.x0, m.x1, ease(seg(t, m.t0, m.t1))); }
+  return x;
+}
+function moveAt(ch, t) { return ch.moves.find(m => t >= m.t0 && t < m.t1); }
+function emotionAt(ch, t) { let e = 'happy'; for (const x of ch.ems) if (x.t <= t) e = x.em; return e; }
+function poseAt(ch, t) { let p = null; for (const x of ch.poses) if (t >= x.t0 && t < x.t1) p = x; return p; }
+function flyingAt(ch, t) { let f = false; for (const x of ch.fly) if (x.t <= t) f = x.on; return f; }
+function mouthAt(id, t) { const e = D.env[id]; if (!e) return 0; const f = Math.round(t * FPS); return Math.max(e[f] || 0, (e[f - 1] || 0) * 0.6); }
+
+// ───────────────────────── speech bubbles / captions ─────────────────────────
+function buildBubble(line, color, name) {
+  const g = mk('g', { opacity: 0 }, $('bubbles'));
+  const size = 50;
+  const lines = wrap(line.text, size, 620, 3);
+  const w = Math.max(...lines.map(l => measure(l, size))) + 80, h = lines.length * size * 1.18 + 52;
+  const tail = mk('path', { d: '', fill: '#fff', stroke: color, 'stroke-width': 7, 'stroke-linejoin': 'round' }, g);
+  mk('rect', { x: -w / 2, y: -h, width: w, height: h, rx: 42, fill: '#fff', stroke: color, 'stroke-width': 7 }, g);
+  const cover = mk('rect', { x: -30, y: -10, width: 60, height: 14, fill: '#fff' }, g);
+  textLines(g, lines, size, { x: 0, y: -h + 26 + size * 0.86, fill: '#3E2712' });
+  const nw = measure(name, 36) + 44;
+  const tag = mk('g', { transform: `translate(${-w / 2 + 24 + nw / 2},${-h - 4}) rotate(-4)` }, g);
+  mk('rect', { x: -nw / 2, y: -26, width: nw, height: 52, rx: 26, fill: color, stroke: '#fff', 'stroke-width': 5 }, tag);
+  const nt = mk('text', { x: 0, y: 12, 'font-size': 36, 'font-weight': 800, fill: '#fff', 'text-anchor': 'middle' }, tag); nt.textContent = name;
+  return { g, tail, cover, w, h };
+}
+
+function captionsFor(lines) {
+  const out = [];
+  for (const l of lines) {
+    if (l.who !== 'narrator' || l.kind === 'title' || l.kind === 'bye') continue;
+    const parts = l.text.split(/(?<=[,।!?]|\.\.\.)\s+/).flatMap(p => {
+      if (p.length <= 48) return [p];
+      const ws = p.split(' '); const res = []; let cur = '';
+      ws.forEach(w => { if ((cur + ' ' + w).length > 44 && cur) { res.push(cur); cur = w; } else cur = cur ? cur + ' ' + w : w; });
+      if (cur) res.push(cur); return res;
+    }).filter(Boolean);
+    const tot = parts.reduce((a, p) => a + p.length + 4, 0); let t0 = l.start;
+    parts.forEach((p, i) => { const d = (l.end - l.start) * (p.length + 4) / tot; out.push({ a: t0, b: i === parts.length - 1 ? (l.pauseEnd || l.end + 0.25) : t0 + d, text: p }); t0 += d; });
+  }
+  return out;
+}
+
+// ───────────────────────── screen cards ─────────────────────────
+function buildTitle() {
+  const g = $('title');
+  const words = D.story.title.split(/\s+/);
+  const size = 104;
+  const lines = wrap(D.story.title, size, 1300, 2);
+  const w = Math.max(...lines.map(l => measure(l, size))) + 160, h = lines.length * size * 1.15 + 110;
+  const board = mk('g', {}, g);
+  [-1, 1].forEach(s => mk('rect', { x: s * (w / 2 - 90) - 14, y: h / 2 - 10, width: 28, height: 260, rx: 8, fill: '#6D4C41' }, board));
+  mk('rect', { x: -w / 2, y: -h / 2 + 12, width: w, height: h, rx: 36, fill: '#5D3A1A' }, board);
+  mk('rect', { x: -w / 2, y: -h / 2, width: w, height: h, rx: 36, fill: '#A1662F', stroke: '#6D3F1A', 'stroke-width': 10 }, board);
+  for (let i = 1; i < 4; i++) mk('line', { x1: -w / 2 + 20, x2: w / 2 - 20, y1: -h / 2 + h * i / 4, y2: -h / 2 + h * i / 4, stroke: '#8D5524', 'stroke-width': 4, opacity: 0.6 }, board);
+  [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([a, b]) => mk('circle', { cx: a * (w / 2 - 30), cy: b * (h / 2 - 30), r: 9, fill: '#FFD54F', stroke: '#6D3F1A', 'stroke-width': 3 }, board));
+  const ts = lines.map((l, i) => { const t = mk('text', { x: 0, y: -h / 2 + 55 + size * 0.85 + i * size * 1.15, 'font-size': size, 'font-weight': 800, 'text-anchor': 'middle', fill: '#FFE082', stroke: '#4E2A0E', 'stroke-width': 12, 'paint-order': 'stroke' }, board); t.textContent = l; return t; });
+  const rib = mk('g', {}, g);
+  const rw = measure('पंचतंत्र की कहानी', 46) + 110;
+  mk('path', { d: `M ${-rw / 2 - 40} -30 L ${-rw / 2} -30 L ${-rw / 2} 34 L ${-rw / 2 - 40} 34 L ${-rw / 2 - 20} 2 Z M ${rw / 2 + 40} -30 L ${rw / 2} -30 L ${rw / 2} 34 L ${rw / 2 + 40} 34 L ${rw / 2 + 20} 2 Z`, fill: '#B71C1C' }, rib);
+  mk('rect', { x: -rw / 2, y: -38, width: rw, height: 76, rx: 10, fill: '#E53935', stroke: '#fff', 'stroke-width': 5 }, rib);
+  const rt = mk('text', { x: 0, y: 16, 'font-size': 46, 'font-weight': 800, 'text-anchor': 'middle', fill: '#fff' }, rib); rt.textContent = 'पंचतंत्र की कहानी';
+  const sparkles = Array.from({ length: 12 }, (_, i) => ({ e: mk('path', { d: 'M 0 -22 L 6 -6 L 22 0 L 6 6 L 0 22 L -6 6 L -22 0 L -6 -6 Z', fill: i % 2 ? '#FFF59D' : '#fff' }, g), a: i / 12 * Math.PI * 2, d: w / 2 + 60 + (i % 3) * 50 }));
+  return { board, rib, ts, sparkles, h, words };
+}
+
+function buildBrand() {
+  const g = $('brand');
+  const name = D.brand || 'कहानी घर';
+  const w = measure(name, 32) + 110;
+  mk('rect', { x: 0, y: 0, width: w, height: 64, rx: 32, fill: 'rgba(255,255,255,0.88)' }, g);
+  mk('path', { d: 'M 24 18 h 18 q 8 0 8 8 v 22 q 0 -6 -8 -6 h -18 Z M 72 18 h -18 q -8 0 -8 8 v 22 q 0 -6 8 -6 h 18 Z', fill: '#E91E63' }, g);
+  const t = mk('text', { x: 90, y: 44, 'font-size': 32, 'font-weight': 800, fill: '#5D3A1A' }, g); t.textContent = name;
+  g.setAttribute('transform', 'translate(50,46)');
+}
+
+function buildQuestion() {
+  const g = $('question');
+  const card = mk('g', {}, g);
+  const label = 'सोचो बच्चों!';
+  const w = measure(label, 66) + 260;
+  mk('rect', { x: -w / 2, y: -70, width: w, height: 140, rx: 70, fill: '#7E57C2', stroke: '#fff', 'stroke-width': 8 }, card);
+  const t = mk('text', { x: -40, y: 22, 'font-size': 66, 'font-weight': 800, 'text-anchor': 'middle', fill: '#fff' }, card); t.textContent = label;
+  const ring = mk('g', { transform: `translate(${w / 2 - 80},0)` }, card);
+  mk('circle', { r: 46, fill: '#FFD54F' }, ring);
+  const arc = mk('circle', { r: 38, fill: 'none', stroke: '#E65100', 'stroke-width': 10, 'stroke-dasharray': 238.8, 'stroke-dashoffset': 0, transform: 'rotate(-90)' }, ring);
+  const num = mk('text', { x: 0, y: 20, 'font-size': 58, 'font-weight': 800, 'text-anchor': 'middle', fill: '#5D3A1A' }, ring);
+  const qs = [-1, 1].map(s => { const q = mk('text', { 'font-size': 150, 'font-weight': 800, fill: '#FFEB3B', stroke: '#5D3A1A', 'stroke-width': 8, 'paint-order': 'stroke', 'text-anchor': 'middle' }, g); q.textContent = '?'; return q; });
+  return { card, arc, num, qs, w };
+}
+
+function buildMoral() {
+  const g = $('moral');
+  const card = mk('g', {}, g);
+  const lines = wrap(D.story.moral, 70, 1200, 3);
+  const w = Math.max(...lines.map(l => measure(l, 70))) + 180, h = lines.length * 70 * 1.18 + 150;
+  mk('rect', { x: -w / 2, y: -h / 2 + 14, width: w, height: h, rx: 40, fill: '#C49A5A' }, card);
+  mk('rect', { x: -w / 2, y: -h / 2, width: w, height: h, rx: 40, fill: '#FFF3D6', stroke: '#E0A84E', 'stroke-width': 10 }, card);
+  textLines(card, lines, 70, { x: 0, y: -h / 2 + 105 + 54, fill: '#5D3A1A' });
+  const badge = mk('g', { transform: `translate(0,${-h / 2})` }, card);
+  mk('rect', { x: -130, y: -50, width: 260, height: 100, rx: 50, fill: '#43A047', stroke: '#fff', 'stroke-width': 7 }, badge);
+  const bt = mk('text', { x: 0, y: 22, 'font-size': 64, 'font-weight': 800, 'text-anchor': 'middle', fill: '#fff' }, badge); bt.textContent = '⭐ सीख';
+  return { card, h };
+}
+
+function buildEnding() {
+  const g = mk('g', { style: 'display:none' }, $('world'));
+  const bg = BACKGROUNDS.meadow.build(mk('g', {}, g));
+  const counts = {}; D.lines.forEach(l => { if (l.who !== 'narrator') counts[l.who] = (counts[l.who] || 0) + 1; });
+  const ids = D.cast.map(c => c.id).sort((a, b) => (counts[b] || 0) - (counts[a] || 0)).slice(0, 4).filter(id => D.castById[id].species !== 'crocodile');
+  const xs = { 1: [960], 2: [700, 1220], 3: [480, 960, 1440], 4: [360, 760, 1160, 1560] }[Math.max(1, ids.length)];
+  const chars = ids.map((id, i) => { const c = D.castById[id]; const sp = SPECIES[c.species]; const root = mk('g', {}, g); const holder = mk('g', {}, root); return { id, rig: sp.build(holder), root, x: xs[i], scale: BASE_SCALE * (sp.scale || 1), i }; });
+  const txt = $('ending');
+  const label = 'फिर मिलेंगे!';
+  const t = mk('text', { x: 0, y: 0, 'font-size': 150, 'font-weight': 800, 'text-anchor': 'middle', fill: '#FFEB3B', stroke: '#6D3F1A', 'stroke-width': 16, 'paint-order': 'stroke' }, txt); t.textContent = label;
+  const t2 = mk('text', { x: 0, y: 92, 'font-size': 56, 'font-weight': 800, 'text-anchor': 'middle', fill: '#fff', stroke: '#6D3F1A', 'stroke-width': 9, 'paint-order': 'stroke' }, txt); t2.textContent = 'एक नई कहानी के साथ';
+  return { g, bg, chars };
+}
+
+// ───────────────────────── setup ─────────────────────────
+let TITLE, QUESTION, MORAL, CAPS, BUBBLES = [], QLINES = [], MORAL_LINE, BYE_LINE, SWITCH = [];
+window.setData = function (data) {
+  D = data;
+  D.castById = Object.fromEntries(D.story.cast.map(c => [c.id, c]));
+  D.cast = D.story.cast;
+  defs($('svg'));
+  MORAL_LINE = D.lines.find(l => l.kind === 'moral');
+  BYE_LINE = D.lines.find(l => l.kind === 'bye');
+  const beatLines = D.lines.filter(l => l.kind === 'beat');
+  const nS = D.story.scenes.length;
+  for (let si = 0; si < nS; si++) {
+    const ls = beatLines.filter(l => l.scene === si);
+    SWITCH[si] = si === 0 ? 0 : ls[0].start - 0.55;
+  }
+  SWITCH[nS] = BYE_LINE.start - 0.6;   // ending scene
+  D.story.scenes.forEach((sc, si) => {
+    const ls = []; beatLines.filter(l => l.scene === si).forEach(l => { ls[l.beat] = l; });
+    SC.push(planScene(si, sc, ls, SWITCH[si], SWITCH[si + 1]));
+  });
+  END = buildEnding();
+  TITLE = buildTitle(); QUESTION = buildQuestion(); MORAL = buildMoral(); buildBrand();
+  CAPS = captionsFor(D.lines);
+  QLINES = D.lines.filter(l => l.question);
+  D.lines.forEach(l => {
+    if (l.kind !== 'beat' || l.who === 'narrator') return;
+    const c = D.castById[l.who]; if (!c) return;
+    BUBBLES.push({ l, b: buildBubble(l, COLORS[D.cast.indexOf(c) % COLORS.length], c.name), scene: l.scene });
+  });
+  ready = true;
+};
+
+function sceneIndexAt(t) { let i = 0; for (let k = 0; k < SWITCH.length; k++) if (t >= SWITCH[k]) i = k; return i; }
+
+// ───────────────────────── per-frame ─────────────────────────
+function drawChar(S, ch, t, moralMode) {
+  const visible = t >= ch.visFrom && t < ch.visTo;
+  ch.root.style.display = visible ? '' : 'none';
+  if (!visible) { hideFx(ch.fx); return null; }
+  let x = xAt(ch, t), y = ch.y;
+  const mv = moveAt(ch, t);
+  const ps = poseAt(ch, t);
+  let pose = mv ? mv.pose : (ps ? ps.pose : 'idle');
+  let emotion = emotionAt(ch, t);
+  if (moralMode) { pose = ch.croc ? 'idle' : 'celebrate'; emotion = 'happy'; }
+  // facing
+  let face = 1;
+  const others = Object.values(S.chars).filter(o => o !== ch && t >= o.visFrom && t < o.visTo);
+  const speaking = others.find(o => mouthAt(o.id, t) > 0.05);
+  if (mv) face = mv.x1 >= mv.x0 ? 1 : -1;
+  else if (speaking) face = xAt(speaking, t) >= x ? 1 : -1;
+  else if (others.length) face = others.reduce((a, o) => a + xAt(o, t), 0) / others.length >= x ? 1 : -1;
+  else face = x < 960 ? 1 : -1;
+  if (ch.croc) face = -1;   // crocodile faces the bank
+  // jumps / falls / flying / croc rise
+  let dy = 0, rot = 0;
+  for (const j of ch.jumps) if (t >= j && t < j + 0.7) { dy = -Math.sin(seg(t, j, j + 0.7) * Math.PI) * 170; if (!mv) pose = 'celebrate'; }
+  let fallP = 0;
+  for (const f of ch.falls) if (t >= f && t < f + 1.8) { const p = t - f; fallP = p < 0.25 ? easeOut(p / 0.25) : p < 1.2 ? 1 : 1 - ease(seg(p, 1.2, 1.8)); }
+  rot = -fallP * 80 * face;
+  const fly = !ch.croc && flyingAt(ch, t);
+  if (ch.c.species === 'crow' && fly) { dy -= 300 + Math.sin(t * 3) * 20; pose = 'fly'; }
+  if (ch.croc) {
+    const rise = ch.riseAt !== undefined ? easeOut(seg(t, ch.riseAt, ch.riseAt + 0.9)) : 1;
+    const sink = ch.sinkAt !== undefined ? ease(seg(t, ch.sinkAt, ch.sinkAt + 1.0)) : 0;
+    dy += (1 - rise) * 260 + sink * 260;
+  }
+  const walkPhase = mv ? (t - mv.t0) * (mv.pose === 'run' ? 17 : 10) : 0;
+  const blink = ((t + ch.blinkSeed) % 3.6) < 0.12;
+  const mouth = mouthAt(ch.id, t);
+  const sc = ch.scale;
+  ch.root.setAttribute('transform', `translate(${x},${y + dy}) rotate(${rot}) scale(${sc * face},${sc})`);
+  ch.rig.update({ t: t + ch.blinkSeed, mouth, emotion, pose, walkPhase, blink, look: face });
+  // effects at the head
+  const ha = ch.rig.headAnchor || { x: 0, y: -ch.rig.height };
+  const hx = x + ha.x * sc * face, hy = y + dy + ha.y * sc;
+  drawFx(ch, t, hx, hy, emotion, pose, ps, mv, fallP, face, x, y);
+  return { x, hx, hy, face };
+}
+
+function drawFx(ch, t, hx, hy, emotion, pose, ps, mv, fallP, face, x, y) {
+  const F = ch.fx; hideFx(F);
+  const eyeY = hy + 70 * ch.scale;
+  if (emotion === 'crying') F.tears.forEach((e, i) => { const p = ((t * 1.3 + i * 0.5) % 1); show(e, 1 - p, hx + (i ? 26 : -26) * ch.scale, eyeY + p * 110, `scale(${1 + p * 0.3})`); });
+  if (pose === 'sleep' || emotion === 'sleepy') F.zzz.forEach((e, i) => { const p = ((t * 0.5 + i / 3) % 1); show(e, Math.sin(p * Math.PI), hx + 40 * face + p * 80 * face, hy - 20 - p * 140); });
+  if (emotion === 'thinking' || pose === 'think') show(F.q, 1, hx + 70 * face, hy - 40 + Math.sin(t * 4) * 8, `rotate(${Math.sin(t * 3) * 10})`);
+  if (emotion === 'angry') F.steam.forEach((e, i) => { const p = ((t * 1.6 + i * 0.5) % 1); show(e, 1 - p, hx + (i ? 50 : -50), hy - 10 - p * 90, `scale(${0.6 + p})`); });
+  if (emotion === 'scared') show(F.sweat, 1, hx + 60 * face, hy + 30 + ((t * 1.5) % 1) * 40);
+  if (emotion === 'laughing' || pose === 'laugh') show(F.haha, 1, hx + 120 * face, hy - 30 + Math.sin(t * 10) * 6, `rotate(${-8 * face + Math.sin(t * 8) * 5}) scale(${0.9 + Math.abs(Math.sin(t * 6)) * 0.15})`);
+  if (pose === 'celebrate') F.stars.forEach((e, i) => { const a = t * 2 + i * 1.256; show(e, 0.95, hx + Math.cos(a) * 130, hy + 40 + Math.sin(a) * 50, `rotate(${t * 120}) scale(${0.8 + Math.sin(t * 5 + i) * 0.3})`); });
+  // "!" pop when surprise starts
+  const sur = ch.ems.filter(e => e.em === 'surprised' && t >= e.t && t < e.t + 1.0).pop();
+  if (sur) show(F.ex, 1, hx + 60 * face, hy - 10, `scale(${pop(t, sur.t, 0.35)})`);
+  if (fallP > 0.9) F.stars.forEach((e, i) => { const a = t * 5 + i * 1.256; show(e, 1, hx - 40 * face + Math.cos(a) * 70, y - 60 + Math.sin(a) * 20, `scale(0.6)`); });
+  if (mv && mv.pose === 'run' && !ch.croc) F.dust.forEach((e, i) => { const p = ((t * 3 + i / 4) % 1); show(e, (1 - p) * 0.7, x - face * (60 + p * 140), y - 14 - p * 30, `scale(${0.6 + p})`); });
+}
+
+function render(t) {
+  if (!ready) return;
+  const nS = SC.length;
+  const si = sceneIndexAt(t);
+  const ending = si === nS;
+  SC.forEach((S, i) => { S.g.style.display = i === si ? '' : 'none'; });
+  END.g.style.display = ending ? '' : 'none';
+  const moralMode = MORAL_LINE && t >= MORAL_LINE.start - 0.8 && !ending;
+  let cam;
+  const pos = {};
+  if (!ending) {
+    const S = SC[si];
+    cam = moralMode ? { x: 960, y: 540, s: 1 } : camAt(S, t);
+    if (moralMode) { const mc = camAt(S, MORAL_LINE.start - 0.8); const p = ease(seg(t, MORAL_LINE.start - 0.8, MORAL_LINE.start + 0.2)); cam = { x: lerp(mc.x, 960, p), y: lerp(mc.y, 540, p), s: lerp(mc.s, 1, p) }; }
+    S.bg.update(t);
+    Object.values(S.chars).forEach(ch => { pos[ch.id] = drawChar(S, ch, t, moralMode); });
+    // keep characters sorted: crocodile behind water front, others by x
+    if (S.waterFront) { let d = `M 1000 ${S.bg.water.y + 18}`; for (let k = 0; k <= 16; k++) d += ` Q ${1000 + k * 100 + 50} ${S.bg.water.y + 18 + Math.sin(t * 2.4 + k) * 10} ${1000 + (k + 1) * 100} ${S.bg.water.y + 18}`; S.waterFront.setAttribute('d', d + ' L 2700 1700 L 900 1700 C 930 1300 960 1100 1000 ' + (S.bg.water.y + 60) + ' Z'); }
+    // gives
+    S.gives.forEach(gv => {
+      const a = pos[gv.from], b = pos[gv.to];
+      const p = seg(t, gv.t, gv.t + 0.85);
+      if (!a || !b || t < gv.t || t > gv.t + 2.4) { gv.g.setAttribute('opacity', 0); return; }
+      const ax = a.x + a.face * 90, ay = SC[si].chars[gv.from].y - 170, bx = b.x, by = SC[si].chars[gv.to].y - 170;
+      const x = lerp(ax, bx, ease(p)), y = lerp(ay, by, p) - Math.sin(p * Math.PI) * 220;
+      gv.g.setAttribute('opacity', p >= 1 ? 1 - seg(t, gv.t + 1.8, gv.t + 2.4) : 1);
+      gv.g.setAttribute('transform', `translate(${x},${p >= 1 ? by + Math.sin(t * 6) * 5 : y}) rotate(${p < 1 ? p * 540 : 0}) scale(1.4)`);
+    });
+  } else {
+    cam = { x: 960, y: 540, s: 1 };
+    END.bg.update(t);
+    END.chars.forEach(c => {
+      const st = SWITCH[nS] + 0.3 + c.i * 0.15;
+      const dy = (1 - easeOut(seg(t, st, st + 0.5))) * 500 - Math.abs(Math.sin((t - st) * 4)) * 20 * (t > st + 0.5 ? 1 : 0);
+      c.root.setAttribute('transform', `translate(${c.x},${880 + dy}) scale(${c.scale * (c.x < 960 ? 1 : -1)},${c.scale})`);
+      c.rig.update({ t: t + c.i, mouth: 0, emotion: 'happy', pose: 'wave', walkPhase: 0, blink: ((t + c.i) % 3) < 0.12 });
+    });
+  }
+  $('world').setAttribute('transform', `translate(960,540) scale(${cam.s}) translate(${-cam.x},${-cam.y})`);
+  const toScreen = (x, y) => ({ x: (x - cam.x) * cam.s + 960, y: (y - cam.y) * cam.s + 540 });
+
+  // speech bubbles
+  BUBBLES.forEach(B => {
+    const { l, b } = B;
+    const on = l.scene === si && !ending && t >= l.start - 0.15 && t < l.end + 0.4;
+    if (!on || !pos[l.who]) { b.g.setAttribute('opacity', 0); return; }
+    const s = pop(t, l.start - 0.15, 0.4) * (1 - seg(t, l.end + 0.2, l.end + 0.4));
+    const hp = toScreen(pos[l.who].hx, pos[l.who].hy);
+    const nb = Object.keys(pos).filter(id => id !== l.who && pos[id]).map(id => pos[id].x);
+    const near = nb.length ? nb.reduce((a, x) => (Math.abs(x - pos[l.who].x) < Math.abs(a - pos[l.who].x) ? x : a)) : null;
+    const dir = near === null ? 0 : (pos[l.who].x >= near ? 1 : -1);
+    const bx = clamp(hp.x + dir * (b.w / 2 - 90), b.w / 2 + 40, 1880 - b.w / 2);
+    const by = clamp(hp.y - 80, b.h + 60, 1000);
+    const tipX = clamp(hp.x - bx, -b.w / 2 + 50, b.w / 2 - 50), tipY = clamp(hp.y - by + 10, 40, 110);
+    b.tail.setAttribute('d', `M ${tipX * 0.35 - 30} -6 L ${tipX} ${tipY} L ${tipX * 0.35 + 30} -6 Z`);
+    b.cover.setAttribute('x', tipX * 0.35 - 30);
+    b.g.setAttribute('opacity', s > 0.01 ? 1 : 0);
+    b.g.setAttribute('transform', `translate(${bx},${by}) scale(${s})`);
+  });
+
+  // captions
+  const cap = CAPS.find(c => t >= c.a && t < c.b);
+  const ci = $('capIn');
+  const hideCap = moralMode && t >= MORAL_LINE.start - 0.2;
+  if (cap && !hideCap) { ci.style.visibility = 'visible'; if (ci.textContent !== cap.text) ci.textContent = cap.text; ci.style.transform = `scale(${0.85 + 0.15 * back(seg(t, cap.a, cap.a + 0.2))})`; }
+  else ci.style.visibility = 'hidden';
+
+  // question card
+  const q = QLINES.find(l => t >= l.start - 0.2 && t < l.pauseEnd + 0.2);
+  if (q) {
+    const s = pop(t, q.start - 0.2, 0.45) * (1 - seg(t, q.pauseEnd - 0.1, q.pauseEnd + 0.2));
+    QUESTION.card.setAttribute('transform', `translate(960,${130 + Math.sin(t * 3) * 6}) scale(${s})`);
+    const rem = t < q.end ? 3 : Math.max(0, q.pauseEnd - t);
+    QUESTION.num.textContent = t < q.end ? '?' : String(Math.max(1, Math.ceil(rem)));
+    QUESTION.arc.setAttribute('stroke-dashoffset', 238.8 * (1 - rem / 3));
+    QUESTION.qs.forEach((e, i) => e.setAttribute('transform', `translate(${960 + (i ? 1 : -1) * (QUESTION.w / 2 + 90)},${190 + Math.sin(t * 5 + i * 2) * 14}) rotate(${(i ? 12 : -12) + Math.sin(t * 4 + i) * 8}) scale(${s})`));
+    $('question').setAttribute('opacity', 1);
+  } else $('question').setAttribute('opacity', 0);
+
+  // moral card + tint
+  if (moralMode) {
+    const s = pop(t, MORAL_LINE.start - 0.3, 0.5);
+    MORAL.card.setAttribute('transform', `translate(960,${330 + Math.sin(t * 2) * 6}) scale(${s})`);
+    $('moral').setAttribute('opacity', 1);
+    $('tint').setAttribute('opacity', 0.35 * seg(t, MORAL_LINE.start - 0.8, MORAL_LINE.start));
+  } else { $('moral').setAttribute('opacity', 0); $('tint').setAttribute('opacity', 0); }
+
+  // ending text
+  if (ending) {
+    const s = pop(t, SWITCH[nS] + 0.5, 0.5);
+    $('ending').setAttribute('transform', `translate(960,${250 + Math.sin(t * 3) * 10}) scale(${s}) rotate(${Math.sin(t * 2) * 2})`);
+    $('ending').setAttribute('opacity', 1);
+  } else $('ending').setAttribute('opacity', 0);
+
+  // title card
+  const TL = D.titleEnd || 4.6;
+  if (t < TL) {
+    const out = ease(seg(t, TL - 0.7, TL - 0.1));
+    TITLE.board.setAttribute('transform', `translate(960,${430 - out * 1000}) scale(${pop(t, 0.15, 0.6)}) rotate(${Math.sin(t * 2.2) * 1.5})`);
+    TITLE.rib.setAttribute('transform', `translate(960,${430 + TITLE.h / 2 + 70 - out * 1000}) scale(${pop(t, 1.0, 0.5)})`);
+    TITLE.sparkles.forEach((s, i) => { const k = seg(t, 0.6 + i * 0.05, 1.8 + i * 0.05); s.e.setAttribute('transform', `translate(${960 + Math.cos(s.a) * s.d * easeOut(k)},${430 + Math.sin(s.a) * s.d * 0.5 * easeOut(k)}) rotate(${t * 90}) scale(${Math.sin(k * Math.PI) * 1.4})`); });
+    $('title').setAttribute('opacity', 1);
+    $('tint').setAttribute('opacity', 0.25 * (1 - out));
+  } else $('title').setAttribute('opacity', 0);
+  $('brand').setAttribute('opacity', seg(t, TL - 0.4, TL + 0.2));
+
+  // iris wipe between scenes
+  let r = 2400;
+  for (let k = 1; k < SWITCH.length; k++) { const sw = SWITCH[k]; if (t > sw - 0.5 && t < sw + 0.5) r = Math.abs(t - sw) < 0.06 ? 0 : 1300 * ease(clamp(Math.abs(t - sw) / 0.5)); }
+  if (r < 2400) {
+    $('iris').setAttribute('d', `M -10 -10 H 1930 V 1090 H -10 Z M ${960 - r} 540 a ${r} ${r} 0 1 0 ${2 * r} 0 a ${r} ${r} 0 1 0 ${-2 * r} 0 Z`);
+    $('iris').setAttribute('opacity', 1);
+  } else $('iris').setAttribute('opacity', 0);
+}
+window.render = render;
+
+// ───────────────────────── thumbnail ─────────────────────────
+window.renderThumbnail = function () {
+  const S = SC[0];
+  SC.forEach((x, i) => { x.g.style.display = i === 0 ? '' : 'none'; });
+  END.g.style.display = 'none';
+  ['bubbles', 'question', 'moral', 'ending', 'title', 'brand', 'iris'].forEach(id => $(id).setAttribute('opacity', 0));
+  $('capIn').style.visibility = 'hidden';
+  $('tint').setAttribute('opacity', 0);
+  S.bg.update(2);
+  const counts = {}; D.lines.forEach(l => { if (l.who !== 'narrator') counts[l.who] = (counts[l.who] || 0) + 1; });
+  const main = D.cast.map(c => c.id).sort((a, b) => (counts[b] || 0) - (counts[a] || 0)).slice(0, 2);
+  Object.values(S.chars).forEach(ch => { ch.root.style.display = 'none'; ch.fx.g.style.display = 'none'; });
+  const tg = mk('g', {}, S.g);
+  main.forEach((id, i) => {
+    const c = D.castById[id]; const sp = SPECIES[c.species];
+    const root = mk('g', {}, tg); const rig = sp.build(mk('g', {}, root));
+    const sc = { tortoise: 2.6, crocodile: 1.6, deer: 1.45, elephant: 1.5, mouse: 2.6, crow: 2.1 }[c.species] || 1.75 * (sp.scale || 1);
+    const croc = c.species === 'crocodile';
+    root.setAttribute('transform', `translate(${i ? 1440 : 480},${croc ? 1000 : (c.species === 'tortoise' ? 930 : 1010)}) scale(${sc * (i ? -1 : 1)},${sc})`);
+    rig.update({ t: 1.3, mouth: i ? 0 : 0.7, emotion: i ? 'surprised' : 'happy', pose: i ? 'point' : 'celebrate', walkPhase: 0, blink: false });
+  });
+  $('world').setAttribute('transform', 'translate(960,540) scale(1) translate(-960,-540)');
+  const sg = $('screen');
+  const grad = mk('linearGradient', { id: 'thTop', x1: 0, y1: 0, x2: 0, y2: 1 }, $('bgDefs'));
+  mk('stop', { offset: 0, 'stop-color': '#1A0F2E', 'stop-opacity': 0.75 }, grad); mk('stop', { offset: 1, 'stop-color': '#1A0F2E', 'stop-opacity': 0 }, grad);
+  mk('rect', { x: 0, y: 0, width: 1920, height: 520, fill: 'url(#thTop)' }, sg);
+  const text = D.story.thumbnailText || D.story.title;
+  const lines = wrap(text, 190, 1700, 2);
+  lines.forEach((l, i) => {
+    const t = mk('text', { x: 960, y: 230 + i * 205, 'font-size': 190, 'font-weight': 800, 'text-anchor': 'middle', fill: i ? '#FFFFFF' : '#FFEB3B', stroke: '#3E1F0A', 'stroke-width': 26, 'paint-order': 'stroke', transform: `rotate(-2 960 ${200 + i * 205})` }, sg);
+    t.textContent = l;
+  });
+  const rib = mk('g', { transform: 'translate(960,1010)' }, sg);
+  const rw = measure('पंचतंत्र की कहानी', 54) + 90;
+  mk('rect', { x: -rw / 2, y: -46, width: rw, height: 92, rx: 46, fill: '#E53935', stroke: '#fff', 'stroke-width': 7 }, rib);
+  const rt = mk('text', { x: 0, y: 20, 'font-size': 54, 'font-weight': 800, 'text-anchor': 'middle', fill: '#fff' }, rib); rt.textContent = 'पंचतंत्र की कहानी';
+};
+</script>
+</body></html>

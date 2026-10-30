@@ -12,6 +12,7 @@ const STYLE = () => (process.env.VISUAL_STYLE || 'animated').toLowerCase();
 async function processJob(job, reporter, { workDir, upload = true } = {}) {
   fs.mkdirSync(workDir, { recursive: true });
   fs.cpSync(path.join(__dirname, 'fonts'), path.join(workDir, 'fonts'), { recursive: true });
+  if (job.kind === 'story') return require('./story').processStoryJob(job, reporter, { workDir, upload });
   const scriptText = job.script && job.script.script;
   if (!scriptText) throw new Error('Job has no script');
   const title = job.title || job.script.title || 'Personal Finance';

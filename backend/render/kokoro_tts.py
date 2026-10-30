@@ -1,7 +1,7 @@
 """Batch voiceover with Kokoro (open-source neural TTS, runs offline on CPU).
 
 Usage: python3 kokoro_tts.py jobs.json
-jobs.json: [{"text": "...", "out": "/path/sentence.wav"}, ...]
+jobs.json: [{"text": "...", "out": "/path/sentence.wav", "voice"?: "hm_omega", "speed"?: 0.9, "lang"?: "hi"}, ...]
 Prints "PROGRESS <done> <total>" lines. Model files are downloaded once into KOKORO_DIR.
 """
 import json
@@ -34,8 +34,10 @@ def main():
     k = Kokoro(os.path.join(MODEL_DIR, "kokoro-v1.0.onnx"), os.path.join(MODEL_DIR, "voices-v1.0.bin"))
     voice = os.environ.get("KOKORO_VOICE") or "am_michael"
     speed = float(os.environ.get("KOKORO_SPEED") or "1.0")
+    lang = os.environ.get("KOKORO_LANG") or "en-us"
     for i, job in enumerate(jobs):
-        samples, sr = k.create(job["text"], voice=voice, speed=speed, lang="en-us")
+        # per-line overrides (used by the multi-voice story renderer)
+        samples, sr = k.create(job["text"], voice=job.get("voice") or voice, speed=float(job.get("speed") or speed), lang=job.get("lang") or lang)
         sf.write(job["out"], samples, sr)
         print(f"PROGRESS {i + 1} {len(jobs)}", flush=True)
 
