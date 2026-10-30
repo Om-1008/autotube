@@ -72,7 +72,9 @@ async function animatedVideo({ job, title, scenes, tts, workDir, reporter }) {
   const storyboard = await buildStoryboard({ title, sentences, sectionStarts, reporter });
 
   await reporter.stage('rendering', `Animating ${storyboard.beats.length} beats`);
-  const H = parseInt(process.env.OUTPUT_HEIGHT_ANIMATED || '1080', 10);
+  // 1440p: YouTube streams 1440p+ uploads with VP9/AV1 at a much higher bitrate, so text and
+  // flat graphics stay crisp even for 1080p viewers (1080p uploads get soft H.264 streams)
+  const H = parseInt(process.env.OUTPUT_HEIGHT_ANIMATED || '1440', 10);
   const brand = process.env.CHANNEL_NAME || 'WealthSutra';
   const { videoPath, thumbPath, beats } = await renderAnimated({
     storyboard, sentences, totalDuration: tts.totalDuration, brand, workDir, reporter,

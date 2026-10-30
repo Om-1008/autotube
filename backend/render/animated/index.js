@@ -101,7 +101,7 @@ async function renderAnimated({ storyboard, sentences, totalDuration, brand = 'W
         await page.evaluate(beat => window.setBeat(beat), { ...rest, words, captions });
         const ff = spawn('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y',
           '-f', 'image2pipe', '-framerate', String(FPS), '-c:v', 'mjpeg', '-i', '-',
-          '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-pix_fmt', 'yuv420p', '-r', String(FPS), '-g', String(FPS * 2), '-threads', '2', tmp],
+          '-c:v', 'libx264', '-preset', 'veryfast', '-tune', 'animation', '-crf', '16', '-pix_fmt', 'yuv420p', '-r', String(FPS), '-g', String(FPS * 2), '-threads', '2', tmp],
         { stdio: ['pipe', 'ignore', 'pipe'] });
         let ffErr = '';
         ff.stderr.on('data', d => { ffErr = (ffErr + d).slice(-2000); });

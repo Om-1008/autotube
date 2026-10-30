@@ -389,14 +389,14 @@ const TEMPLATES = {
     const src = p.source || {}; const pre = p.prefix ?? '$';
     const sx = 960, sy = 600;
     const srcIcon = badge(g, src.icon || 'wallet', 110);
-    const srcLab = txt(g, sx, sy + 160, src.label || '', { size: 34, weight: 900, maxW: 380 });
+    const srcLab = txt(g, sx, sy + 160, src.label || '', { size: 38, weight: 900, maxW: 380 });
     const hasAmt = typeof src.amount === 'number' && src.amount > 0;
     const cLab = hasAmt ? txt(g, sx, 270, String(p.counterLabel || 'LEFT').toUpperCase(), { size: 30, weight: 900, fill: C.gray, ls: 2, maxW: 420 }) : null;
     const cNum = hasAmt ? mk('text', { x: sx, y: 390, 'font-size': 110, 'text-anchor': 'middle', fill: C.ink, style: 'font-family:Anton' }, g) : null;
     const pos = n <= 2 ? [[1500, 420], [1500, 690]] : [[1420, 400], [1660, 400], [1420, 670], [1660, 670]];
     const nodes = items.map((it, i) => {
       const gi = mk('g', {}, g); badge(gi, it.icon || 'coin', n <= 2 ? 82 : 70);
-      txt(gi, 0, n <= 2 ? 122 : 110, it.label || '', { size: 30, weight: 900, maxW: 230 });
+      txt(gi, 0, n <= 2 ? 124 : 112, it.label || '', { size: 34, weight: 900, maxW: 230 });
       if (typeof it.amount === 'number') txt(gi, 0, n <= 2 ? 158 : 146, (p.outflow === false ? '+' : '-') + fmt(it.amount, pre), { size: 28, weight: 900, fill: p.outflow === false ? C.green : C.red, maxW: 230 });
       const bill = mk('g', {}, g); mk('rect', { x: -60, y: -30, width: 120, height: 60, rx: 10, fill: C.green2, stroke: '#15803D', 'stroke-width': 4 }, bill); mk('circle', { r: 18, fill: '#15803D' }, bill); txt(bill, 0, 9, '$', { size: 26, weight: 900, fill: '#fff' });
       return { gi, bill, x: pos[i][0], y: pos[i][1], amt: Number(it.amount) || 0 };
@@ -474,13 +474,20 @@ const TEMPLATES = {
       txt(gc, 0, 66, s.title || (i ? 'Option B' : 'Option A'), { font: 'Anton', size: 50, fill: '#fff', maxW: w - 40, upper: true });
       let y = 150;
       if (s.value !== undefined && s.value !== null && s.value !== '') { txt(gc, 0, y + 52, typeof s.value === 'number' ? fmt(s.value, p.prefix || '', p.suffix || '') : String(s.value), { font: 'Anton', size: 84, fill: i === win ? C.green : C.ink, maxW: w - 40 }); y += 110; }
+      let cursor = y + 10;
       const pts = (s.points || []).slice(0, 3).map((raw, k) => {
         const pt = typeof raw === 'object' && raw ? String(raw.text || '') : String(raw);
         const good = typeof raw === 'object' && raw && typeof raw.good === 'boolean' ? raw.good : (win === -1 ? null : i === win ? true : null);
-        const row = mk('g', { transform: `translate(${-w / 2 + 40},${y + 20 + k * 100})` }, gc);
-        mk('circle', { cx: 20, cy: 0, r: 20, fill: good === null ? C.gray : good ? C.green : C.coral }, row);
-        mk('path', { d: good === false ? 'M 12 -8 L 28 8 M 28 -8 L 12 8' : good === null ? 'M 13 0 H 27' : 'M 11 0 L 18 8 L 30 -7', stroke: '#fff', 'stroke-width': 5, fill: 'none', 'stroke-linecap': 'round' }, row);
-        const tb = textBlock(row, 56, 0, pt, { size: 30, weight: 800, maxLines: 2, maxW: w - 120, anchor: 'start' });
+        const row = mk('g', {}, gc);
+        const tb = textBlock(row, 56, 0, pt, { size: 36, min: 28, weight: 800, maxLines: 2, maxW: w - 110, anchor: 'start' });
+        const h = Math.max(48, tb.height);
+        const cy = cursor + h / 2;
+        row.setAttribute('transform', `translate(${-w / 2 + 40},${cy})`);
+        cursor += h + 30;
+        const ic = mk('g', {}, row);
+        row.insertBefore(ic, tb.el);
+        mk('circle', { cx: 20, cy: 0, r: 20, fill: good === null ? C.gray : good ? C.green : C.coral }, ic);
+        mk('path', { d: good === false ? 'M 12 -8 L 28 8 M 28 -8 L 12 8' : good === null ? 'M 13 0 H 27' : 'M 11 0 L 18 8 L 30 -7', stroke: '#fff', 'stroke-width': 5, fill: 'none', 'stroke-linecap': 'round' }, ic);
         return row;
       });
       return { gc, box, pts };

@@ -50,7 +50,7 @@ Optional variables: `TTS_ENGINE` (`kokoro` default, or `edge`), `KOKORO_VOICE` (
 `VISUAL_STYLE` (`animated` default, or `footage`),
 `YOUTUBE_PRIVACY` (`public` by default; set `unlisted` or `private` to review on YouTube first),
 `YOUTUBE_AI_LABEL` (`true` to tick YouTube's "altered or synthetic content" box on every upload; off by default),
-`OUTPUT_HEIGHT` (footage style, `1440` default), `OUTPUT_HEIGHT_ANIMATED` (`1080` default).
+`OUTPUT_HEIGHT` (footage style, `1440` default), `OUTPUT_HEIGHT_ANIMATED` (`1440` default — keeps YouTube quality high; `1080` renders ~2× faster).
 
 ### YouTube
 Visit `https://<render-app>/auth/youtube` once and approve. Tokens are stored in Redis and refresh automatically.
