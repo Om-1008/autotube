@@ -5,7 +5,9 @@ const fs = require('fs');
 const { google } = require('googleapis');
 const redis = require('./redis');
 
-const TOKENS_KEY = 'autotube:youtube_tokens';
+// One YouTube login per channel (finance keeps its original key)
+const TOKEN_KEYS = { finance: 'autotube:youtube_tokens', kids: 'autotube:kids:youtube_tokens' };
+const keyOf = (channel = 'finance') => TOKEN_KEYS[channel] || TOKEN_KEYS.finance;
 
 function getOAuthClient() {
   return new google.auth.OAuth2(
@@ -15,14 +17,14 @@ function getOAuthClient() {
   );
 }
 
-async function saveTokens(tokens) {
-  await redis.setJSON(TOKENS_KEY, tokens);
-  console.log('[YouTube] Tokens saved to Redis');
+async function saveTokens(tokens, channel) {
+  await redis.setJSON(keyOf(channel), tokens);
+  console.log(`[YouTube:${channel || 'finance'}] Tokens saved to Redis`);
 }
 
-async function loadTokens() {
+async function loadTokens(channel) {
   try {
-    let t = await redis.getJSON(TOKENS_KEY);
+    let t = await redis.getJSON(keyOf(channel));
     // Legacy wrapper from the earlier save format
     if (t && t.value && !t.access_token && !t.refresh_token) t = redis.parseStored(t.value);
     return t || null;
@@ -32,26 +34,27 @@ async function loadTokens() {
   }
 }
 
-async function clearTokens() {
-  await redis.del(TOKENS_KEY);
+async function clearTokens(channel) {
+  await redis.del(keyOf(channel));
 }
 
-async function getAuthenticatedClient() {
+async function getAuthenticatedClient(channel) {
   const oauth2Client = getOAuthClient();
-  const tokens = await loadTokens();
+  const tokens = await loadTokens(channel);
   if (!tokens) throw new Error('YouTube not connected. Visit /auth/youtube to connect your channel.');
   if (!tokens.refresh_token) {
     throw new Error('YouTube refresh_token missing. Visit /auth/youtube/revoke, then re-authorize at /auth/youtube');
   }
   oauth2Client.setCredentials(tokens);
   oauth2Client.on('tokens', async (newTokens) => {
-    try { await saveTokens({ ...tokens, ...newTokens }); } catch (e) { /* non-fatal */ }
+    try { await saveTokens({ ...tokens, ...newTokens }, channel); } catch (e) { /* non-fatal */ }
   });
   return oauth2Client;
 }
 
-function getAuthUrl() {
+function getAuthUrl(channel = 'finance') {
   return getOAuthClient().generateAuthUrl({
+    state: channel,
     access_type: 'offline',
     scope: [
       'https://www.googleapis.com/auth/youtube.upload',
@@ -61,14 +64,14 @@ function getAuthUrl() {
   });
 }
 
-async function exchangeCodeForTokens(code) {
+async function exchangeCodeForTokens(code, channel) {
   const { tokens } = await getOAuthClient().getToken(code);
-  await saveTokens(tokens);
+  await saveTokens(tokens, channel);
   return tokens;
 }
 
-async function isYouTubeConnected() {
-  return !!(await loadTokens());
+async function isYouTubeConnected(channel) {
+  return !!(await loadTokens(channel));
 }
 
 function fmtTime(sec) {
@@ -112,11 +115,11 @@ function buildDescription(scriptData) {
 }
 
 // Upload a rendered MP4. Does not touch the DB — caller records the result.
-async function uploadVideo(videoPath, scriptData, { onProgress, thumbnailPath } = {}) {
+async function uploadVideo(videoPath, scriptData, { onProgress, thumbnailPath, channel } = {}) {
   if (!process.env.YOUTUBE_CLIENT_ID || !process.env.YOUTUBE_CLIENT_SECRET) {
     throw new Error('YouTube OAuth credentials not set (YOUTUBE_CLIENT_ID / YOUTUBE_CLIENT_SECRET)');
   }
-  const auth = await getAuthenticatedClient();
+  const auth = await getAuthenticatedClient(channel || (scriptData.kids ? 'kids' : 'finance'));
   const youtube = google.youtube({ version: 'v3', auth });
   const fileSize = fs.statSync(videoPath).size;
   const kids = !!scriptData.kids;
@@ -169,8 +172,8 @@ async function uploadVideo(videoPath, scriptData, { onProgress, thumbnailPath } 
   return { videoId, videoUrl: `https://youtu.be/${videoId}`, thumbnailSet };
 }
 
-async function getChannelInfo() {
-  const auth = await getAuthenticatedClient();
+async function getChannelInfo(channelId) {
+  const auth = await getAuthenticatedClient(channelId);
   const youtube = google.youtube({ version: 'v3', auth });
   const res = await youtube.channels.list({ part: ['snippet', 'statistics'], mine: true });
   const channel = res.data.items?.[0];

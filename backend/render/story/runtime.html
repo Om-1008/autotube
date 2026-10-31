@@ -301,7 +301,7 @@ function buildTitle() {
 
 function buildBrand() {
   const g = $('brand');
-  const name = D.brand || 'कहानी घर';
+  const name = D.brand || 'कहानी पिटारा';
   const w = measure(name, 32) + 110;
   mk('rect', { x: 0, y: 0, width: w, height: 64, rx: 32, fill: 'rgba(255,255,255,0.88)' }, g);
   mk('path', { d: 'M 24 18 h 18 q 8 0 8 8 v 22 q 0 -6 -8 -6 h -18 Z M 72 18 h -18 q -8 0 -8 8 v 22 q 0 -6 8 -6 h 18 Z', fill: '#E91E63' }, g);

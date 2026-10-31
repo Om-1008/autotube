@@ -26,6 +26,25 @@ as a GitHub Actions artifact for 14 days.
    - `VISUAL_STYLE=footage` switches back to Pixabay stock footage
 4. It uploads to YouTube and reports back; the dashboard shows each stage as it happens.
 
+## Channels
+
+The dashboard has one tab per channel. Each has its own history, settings, schedule and YouTube login:
+
+| Channel | Redis keys | What it makes |
+|---|---|---|
+| 💰 WealthSutra | `autotube:data`, `autotube:youtube_tokens` | English personal-finance explainers (above) |
+| 📚 Kahani Pitara | `autotube:kids:data`, `autotube:kids:youtube_tokens` | Hindi animated kids' stories |
+
+**Kahani Pitara flow:** Claude (`STORY_MODEL`, default `claude-sonnet-4-6`) writes a Panchatantra-style story as
+structured data (cast of animals, scenes, dialogue, actions, questions for kids, moral) → you approve →
+the same `Render video` workflow records every line in its character's Hindi voice (Kokoro: narrator `hm_omega`,
+pitch-shifted voices per animal), mixes procedural music and sound effects, animates the cast in
+`backend/render/story/runtime.html` (lip-sync, emotions, speech bubbles, question countdowns, moral card)
+and uploads it as **made for kids**, Hindi, Film & Animation. Code: `backend/render/story/`.
+
+Connect its YouTube channel from the dashboard (Kahani Pitara tab → 🔗 Connect YouTube), or
+`https://<render-app>/auth/youtube?channel=kids`. In Google's account picker choose the Kahani Pitara channel.
+
 ## Setup checklist
 
 ### Render (API server) — environment variables
@@ -53,7 +72,7 @@ Optional variables: `TTS_ENGINE` (`kokoro` default, or `edge`), `KOKORO_VOICE` (
 `OUTPUT_HEIGHT` (footage style, `1440` default), `OUTPUT_HEIGHT_ANIMATED` (`1440` default — keeps YouTube quality high; `1080` renders ~2× faster).
 
 ### YouTube
-Visit `https://<render-app>/auth/youtube` once and approve. Tokens are stored in Redis and refresh automatically.
+Visit `https://<render-app>/auth/youtube` once and approve (kids channel: `?channel=kids`). Tokens are stored in Redis and refresh automatically.
 Custom thumbnails only apply once the channel is phone-verified (youtube.com/verify).
 
 ## Running locally

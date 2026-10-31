@@ -32,14 +32,15 @@ async function main() {
 
   const db = require('./db');
   const { processJob } = require('./render');
-  const data = await db.loadFresh();
-  const job = data.videos.find(v => v.id === jobId);
+  const found = await db.findJob(jobId);
   const reporter = jobstate.createReporter(jobId, 'render', { runUrl });
-  if (!job) {
+  if (!found) {
     await reporter.fail(new Error(`Job ${jobId} not found in database`));
     process.exit(1);
   }
-  job.settings = data.settings;
+  const { job, channel, settings } = found;
+  job.settings = settings;
+  job.channel = channel;
 
   await reporter.stage('queued', runUrl ? 'Render server started on GitHub Actions' : 'Render started');
   const workDir = process.env.RENDER_WORKDIR || path.join(os.tmpdir(), `autotube-${jobId}`);

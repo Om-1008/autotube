@@ -9,6 +9,11 @@ const nodemailer = require('nodemailer');
 const db = require('./db');
 const jobstate = require('./jobstate');
 const yt = require('./youtube');
+const storyWriter = require('./render/story/writer');
+
+const STORY_MODEL = process.env.STORY_MODEL || 'claude-sonnet-4-6';
+const CHANNEL_LABEL = { finance: 'WealthSutra', kids: 'Kahani Pitara' };
+const chOf = (req) => (db.CHANNEL_IDS.includes(req.query.channel) ? req.query.channel : 'finance');
 
 const DASHBOARD_URL = process.env.DASHBOARD_URL || 'https://autotube-zeta.vercel.app';
 const GH_REPO = process.env.GH_REPO || 'Om-1008/autotube';
@@ -145,38 +150,49 @@ function sectionsFromScript(scriptText) {
 }
 
 // ─── Phase 1: generate topic + script (runs on this server) ──────────────────
-async function runPipeline(existingJobId = null) {
-  const data = db.get();
+async function runPipeline(channel = 'finance', existingJobId = null) {
+  const store = db.of(channel);
+  const data = store.get();
   const { niche, audience } = data.settings;
   const jobId = existingJobId || uuidv4();
 
   if (!existingJobId) {
-    await db.update(d => {
+    await store.update(d => {
       d.videos.unshift({
         id: jobId,
         status: 'generating',
         createdAt: new Date().toISOString(),
-        title: 'New video — researching topic…',
+        title: channel === 'kids' ? 'New story — choosing a tale…' : 'New video — researching topic…',
+        kind: channel === 'kids' ? 'story' : undefined,
         topic: null,
         script: null,
       });
       d.nextGenerateAt = getNextRunTime(d.settings.frequencyDays);
     });
   } else {
-    await db.update(d => {
+    await store.update(d => {
       const v = d.videos.find(x => x.id === jobId);
       if (v) { v.status = 'generating'; v.error = null; }
     });
   }
 
   const r = jobstate.createReporter(jobId, 'generate');
+  if (channel === 'kids') {
+    generateStory(store, jobId, r).catch(async (err) => {
+      console.error('[Story] ❌', err.message);
+      await r.fail(err);
+      await store.update(d => { const v = d.videos.find(x => x.id === jobId); if (v) { v.status = 'error'; v.error = err.message; } });
+    });
+    return jobId;
+  }
+  const db_ = store;   // finance pipeline below writes to its own store
   (async () => {
     try {
       await r.stage('researching', `Finding a fresh ${niche} topic`);
       const pastTitles = data.videos.filter(v => v.id !== jobId && v.topic).map(v => v.title);
       const topic = await researchTopic(niche, audience, pastTitles);
       r.log(`Topic: “${topic.title}”`);
-      await db.update(d => { const v = d.videos.find(x => x.id === jobId); if (v) { v.title = topic.title; v.topic = topic; } });
+      await db_.update(d => { const v = d.videos.find(x => x.id === jobId); if (v) { v.title = topic.title; v.topic = topic; } });
 
       await r.stage('writing', 'Claude is drafting ~1,300 words');
       const links = validLinks(data.settings);
@@ -186,7 +202,7 @@ async function runPipeline(existingJobId = null) {
       await r.stage('finalizing', 'Description, tags and thumbnail ideas');
       const meta = await writeMetadata(topic, niche, audience, scriptText);
 
-      await db.update(d => {
+      await db_.update(d => {
         const v = d.videos.find(x => x.id === jobId);
         if (!v) return;
         v.status = 'pending_approval';
@@ -211,11 +227,51 @@ async function runPipeline(existingJobId = null) {
     } catch (err) {
       console.error('[Pipeline] ❌', err.message);
       await r.fail(err);
-      await db.update(d => { const v = d.videos.find(x => x.id === jobId); if (v) { v.status = 'error'; v.error = err.message; } });
+      await db_.update(d => { const v = d.videos.find(x => x.id === jobId); if (v) { v.status = 'error'; v.error = err.message; } });
     }
   })();
 
   return jobId;
+}
+
+// Kids channel: Claude writes a complete Hindi story (cast, scenes, dialogue, actions)
+async function generateStory(store, jobId, r) {
+  const data = store.get();
+  await r.stage('researching', 'Choosing a story kids will love');
+  const pastTitles = data.videos.filter(v => v.id !== jobId && v.story).map(v => v.title);
+  if (data.settings.storyHint) r.log(`Story idea from settings: ${data.settings.storyHint}`);
+  await r.stage('writing', 'Claude is writing the story, characters and dialogue');
+  const story = await storyWriter.writeStory({ anthropic, model: STORY_MODEL, pastTitles, storyHint: data.settings.storyHint || '' });
+  const beats = story.scenes.reduce((a, sc) => a + sc.beats.length, 0);
+  r.log(`Story: “${story.title}” — ${story.cast.map(c => c.name).join(', ')} · ${story.scenes.length} scenes, ${beats} lines`);
+
+  await r.stage('finalizing', 'Preparing it for your review');
+  const script = storyWriter.storyToScript(story);
+  const wordCount = script.split(/\s+/).filter(Boolean).length;
+  await store.update(d => {
+    const v = d.videos.find(x => x.id === jobId);
+    if (!v) return;
+    v.status = 'pending_approval';
+    v.kind = 'story';
+    v.title = story.title;
+    v.story = story;
+    v.script = {
+      title: story.title, duration: `~${Math.max(2, Math.round(wordCount / 95))} min`, wordCount, script,
+      sections: story.scenes.map((sc, i) => ({ name: `दृश्य ${i + 1}` })),
+      thumbnailIdeas: [story.thumbnailText], description: story.description, tags: story.tags, moral: story.moral,
+    };
+  });
+  await r.done('pending_approval');
+  r.log('Ready for your review');
+  await sendEmail({
+    to: process.env.NOTIFY_EMAIL,
+    subject: `📚 New Kahani Pitara story ready for approval: "${story.title}"`,
+    html: `<div style="font-family:sans-serif;max-width:600px;margin:auto">
+      <h2>📚 Kahani Pitara — Story Ready for Review</h2>
+      <p><strong>${story.title}</strong><br>सीख: ${story.moral}</p>
+      <p><a href="${DASHBOARD_URL}?channel=kids" style="background:#e91e63;color:white;padding:12px 24px;border-radius:8px;text-decoration:none">Review &amp; approve</a></p>
+    </div>`,
+  });
 }
 
 function getNextRunTime(frequencyDays) {
@@ -243,9 +299,10 @@ async function dispatchGitHub(jobId) {
   }
 }
 
-async function startRender(jobId) {
+async function startRender(channel, jobId) {
+  const store = db.of(channel);
   const r = jobstate.createReporter(jobId, 'render');
-  await db.update(d => {
+  await store.update(d => {
     const v = d.videos.find(x => x.id === jobId);
     if (v) { v.status = 'approved'; v.approvedAt = new Date().toISOString(); v.error = null; }
   });
@@ -270,7 +327,7 @@ async function startRender(jobId) {
   // Local dev: render in-process
   await r.stage('queued', 'Rendering on this server (GH_DISPATCH_TOKEN not set)');
   const { processJob } = require('./render');
-  const job = { ...db.get().videos.find(v => v.id === jobId), settings: db.get().settings };
+  const job = { ...store.get().videos.find(v => v.id === jobId), settings: store.get().settings, channel };
   const workDir = path.join(__dirname, 'work', jobId);
   processJob(job, r, { workDir }).catch(e => r.fail(e));
 }
@@ -307,8 +364,8 @@ function merge(video, st, { fullLog = false } = {}) {
   return out;
 }
 
-async function mergedVideos(opts) {
-  const videos = db.get().videos;
+async function mergedVideos(channel, opts) {
+  const videos = db.of(channel).get().videos;
   let states = [];
   try { states = await jobstate.readMany(videos.map(v => v.id)); }
   catch (e) { console.error('[JobState] read failed:', e.message); }
@@ -317,9 +374,12 @@ async function mergedVideos(opts) {
 
 // ─── API Routes ───────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => {
-  const data = db.get();
+  const channel = chOf(req);
+  const data = db.of(channel).get();
   res.json({
     status: 'ok',
+    channel,
+    channels: db.CHANNEL_IDS.map(id => ({ id, name: CHANNEL_LABEL[id] || id })),
     videoCount: data.videos.length,
     nextGenerateAt: data.nextGenerateAt,
     settings: data.settings,
@@ -328,7 +388,7 @@ app.get('/health', (req, res) => {
 });
 
 app.get('/videos', async (req, res) => {
-  const list = (await mergedVideos()).map(({ script, ...rest }) => ({
+  const list = (await mergedVideos(chOf(req))).map(({ script, story, ...rest }) => ({
     ...rest,
     scriptPreview: script?.script ? script.script.slice(0, 300) + '…' : null,
     wordCount: script?.wordCount,
@@ -338,7 +398,7 @@ app.get('/videos', async (req, res) => {
 });
 
 app.get('/videos/:id', async (req, res) => {
-  const video = db.get().videos.find(v => v.id === req.params.id);
+  const video = db.of(chOf(req)).get().videos.find(v => v.id === req.params.id);
   if (!video) return res.status(404).json({ error: 'Video not found' });
   let st = null;
   try { st = await jobstate.read(video.id); } catch {}
@@ -346,31 +406,33 @@ app.get('/videos/:id', async (req, res) => {
 });
 
 app.post('/videos/:id/approve', async (req, res) => {
-  const video = (await mergedVideos()).find(v => v.id === req.params.id);
+  const channel = chOf(req);
+  const video = (await mergedVideos(channel)).find(v => v.id === req.params.id);
   if (!video) return res.status(404).json({ error: 'Video not found' });
   if (!['pending_approval', 'error', 'rendered'].includes(video.status)) {
     return res.status(400).json({ error: `Cannot approve video in status: ${video.status}` });
   }
   if (!video.script?.script) return res.status(400).json({ error: 'This job has no script yet — use Retry' });
-  await startRender(video.id);
+  await startRender(channel, video.id);
   res.json({ success: true, status: 'queued' });
 });
 
 // Retry: regenerate the script if it never got one, otherwise re-render
 app.post('/videos/:id/retry', async (req, res) => {
-  const video = db.get().videos.find(v => v.id === req.params.id);
+  const channel = chOf(req);
+  const video = db.of(channel).get().videos.find(v => v.id === req.params.id);
   if (!video) return res.status(404).json({ error: 'Video not found' });
   if (!video.script?.script) {
-    await runPipeline(video.id);
+    await runPipeline(channel, video.id);
     return res.json({ success: true, phase: 'generate' });
   }
-  await startRender(video.id);
+  await startRender(channel, video.id);
   res.json({ success: true, phase: 'render' });
 });
 
 app.post('/videos/:id/reject', async (req, res) => {
   const { reason } = req.body || {};
-  await db.update(d => {
+  await db.of(chOf(req)).update(d => {
     const v = d.videos.find(x => x.id === req.params.id);
     if (v) { v.status = 'rejected'; v.rejectedReason = reason || ''; }
   });
@@ -379,28 +441,29 @@ app.post('/videos/:id/reject', async (req, res) => {
 });
 
 app.delete('/videos/:id', async (req, res) => {
-  await db.update(d => { d.videos = d.videos.filter(v => v.id !== req.params.id); });
+  await db.of(chOf(req)).update(d => { d.videos = d.videos.filter(v => v.id !== req.params.id); });
   try { await jobstate.remove(req.params.id); } catch {}
   res.json({ success: true });
 });
 
 app.post('/pipeline/run', async (req, res) => {
-  const jobId = await runPipeline();
+  const jobId = await runPipeline(chOf(req));
   res.json({ success: true, jobId });
 });
 
 // ─── YouTube OAuth routes ────────────────────────────────────────────────────
 app.get('/auth/youtube', (req, res) => {
   if (!process.env.YOUTUBE_CLIENT_ID) return res.status(400).send('YouTube credentials not configured');
-  res.redirect(yt.getAuthUrl());
+  res.redirect(yt.getAuthUrl(chOf(req)));
 });
 
 app.get('/auth/youtube/callback', async (req, res) => {
-  const { code } = req.query;
+  const { code, state } = req.query;
   if (!code) return res.status(400).send('No code received from Google');
+  const channel = db.CHANNEL_IDS.includes(state) ? state : 'finance';
   try {
-    await yt.exchangeCodeForTokens(code);
-    res.redirect(DASHBOARD_URL + '?youtube=connected');
+    await yt.exchangeCodeForTokens(code, channel);
+    res.redirect(`${DASHBOARD_URL}?youtube=connected&channel=${channel}`);
   } catch (e) {
     res.status(500).send('OAuth error: ' + e.message);
   }
@@ -408,64 +471,82 @@ app.get('/auth/youtube/callback', async (req, res) => {
 
 app.get('/auth/youtube/revoke', async (req, res) => {
   try {
-    await yt.clearTokens();
-    res.send('YouTube tokens cleared. <a href="/auth/youtube">Click here to re-authorize</a>');
+    const channel = chOf(req);
+    await yt.clearTokens(channel);
+    res.send(`YouTube tokens cleared for ${CHANNEL_LABEL[channel]}. <a href="/auth/youtube?channel=${channel}">Click here to re-authorize</a>`);
   } catch (e) {
     res.status(500).send('Error clearing tokens: ' + e.message);
   }
 });
 
 app.get('/auth/youtube/status', async (req, res) => {
-  if (!(await yt.isYouTubeConnected())) return res.json({ connected: false });
-  try { res.json({ connected: true, channel: await yt.getChannelInfo() }); }
+  const channel = chOf(req);
+  if (!(await yt.isYouTubeConnected(channel))) return res.json({ connected: false });
+  try { res.json({ connected: true, channel: await yt.getChannelInfo(channel) }); }
   catch (e) { res.json({ connected: true, channel: null, error: e.message }); }
 });
 
 app.get('/channel/stats', async (req, res) => {
   try {
-    if (!(await yt.isYouTubeConnected())) return res.json({ connected: false });
-    res.json({ connected: true, ...(await yt.getChannelInfo()) });
+    const channel = chOf(req);
+    if (!(await yt.isYouTubeConnected(channel))) return res.json({ connected: false });
+    res.json({ connected: true, ...(await yt.getChannelInfo(channel)) });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-app.get('/settings', (req, res) => res.json(db.get().settings));
+app.get('/settings', (req, res) => res.json(db.of(chOf(req)).get().settings));
 
-const SETTINGS_KEYS = ['niche', 'audience', 'frequencyDays', 'publishHour', 'isRunning', 'affiliateLinks'];
+const SETTINGS_KEYS = {
+  finance: ['niche', 'audience', 'frequencyDays', 'publishHour', 'isRunning', 'affiliateLinks'],
+  kids: ['channelName', 'storyHint', 'frequencyDays', 'publishHour', 'isRunning'],
+};
 
 app.patch('/settings', async (req, res) => {
+  const channel = chOf(req);
+  const store = db.of(channel);
   const patch = {};
-  for (const k of SETTINGS_KEYS) if (k in (req.body || {})) patch[k] = req.body[k];
+  for (const k of SETTINGS_KEYS[channel]) if (k in (req.body || {})) patch[k] = req.body[k];
+  if ('storyHint' in patch) patch.storyHint = String(patch.storyHint || '').trim().slice(0, 300);
+  if ('channelName' in patch) patch.channelName = String(patch.channelName || '').trim().slice(0, 40) || 'कहानी पिटारा';
+  if ('frequencyDays' in patch) patch.frequencyDays = Math.min(30, Math.max(1, parseInt(patch.frequencyDays, 10) || 2));
+  if ('isRunning' in patch) patch.isRunning = !!patch.isRunning;
   if ('affiliateLinks' in patch) {
     patch.affiliateLinks = (Array.isArray(patch.affiliateLinks) ? patch.affiliateLinks : [])
       .map(l => ({ name: String(l.name || '').trim().slice(0, 60), url: String(l.url || '').trim().slice(0, 500) }))
       .filter(l => l.name && /^https?:\/\//.test(l.url))
       .slice(0, 10);
   }
-  await db.update(d => { Object.assign(d.settings, patch); });
-  res.json(db.get().settings);
+  await store.update(d => {
+    Object.assign(d.settings, patch);
+    if ('frequencyDays' in patch) d.nextGenerateAt = getNextRunTime(d.settings.frequencyDays);
+  });
+  res.json(store.get().settings);
 });
 
 // ─── Cron scheduler ──────────────────────────────────────────────────────────
 cron.schedule('0 6 * * *', async () => {
-  const data = db.get();
-  if (!data.settings.isRunning) return console.log('[Cron] Scheduler paused — skipping');
-  const nextRun = data.nextGenerateAt ? new Date(data.nextGenerateAt) : null;
-  if (!nextRun || new Date() >= nextRun) {
-    console.log('[Cron] Time to generate a new video!');
-    await runPipeline();
+  for (const channel of db.CHANNEL_IDS) {
+    const data = db.of(channel).get();
+    if (!data.settings.isRunning) { console.log(`[Cron:${channel}] Scheduler paused — skipping`); continue; }
+    const nextRun = data.nextGenerateAt ? new Date(data.nextGenerateAt) : null;
+    if (!nextRun || new Date() >= nextRun) {
+      console.log(`[Cron:${channel}] Time to generate a new video!`);
+      await runPipeline(channel);
+    }
   }
 });
 
 // ─── Start server ─────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 4000;
-db.init().then(() => {
+db.initAll().then(() => {
   app.listen(PORT, () => {
     console.log(`\n🚀 AutoTube backend running on port ${PORT}`);
     console.log(`   Renderer: ${process.env.GH_DISPATCH_TOKEN ? `GitHub Actions (${GH_REPO})` : 'in-process (set GH_DISPATCH_TOKEN to use GitHub Actions)'}`);
-    if (!db.get().nextGenerateAt) {
-      db.update(d => { d.nextGenerateAt = getNextRunTime(d.settings.frequencyDays); });
+    for (const channel of db.CHANNEL_IDS) {
+      const store = db.of(channel);
+      if (!store.get().nextGenerateAt) store.update(d => { d.nextGenerateAt = getNextRunTime(d.settings.frequencyDays); });
     }
   });
 });

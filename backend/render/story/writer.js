@@ -25,7 +25,8 @@ function prompt({ pastTitles, storyHint }) {
   return `तुम बच्चों (3–8 साल) के लिए एक बहुत प्यारी, मज़ेदार हिंदी कहानी लिखने वाले लेखक हो — पंचतंत्र/जातक/हितोपदेश शैली में।
 
 Write ONE complete animated story script in simple, warm Hindi (Devanagari), 3–5 minutes long when narrated (about 40–60 beats).
-${storyHint ? `Story to tell: ${storyHint}` : `Pick a classic you have NOT done yet: ${CLASSICS.join('; ')}`}
+${storyHint ? `Story to tell: ${storyHint}` : `Pick a classic you have NOT done yet: ${CLASSICS.join('; ')}.
+If all of these are done, retell another Panchatantra / Jataka / Hitopadesha tale, or write an original fable in the same spirit (kindness, honesty, teamwork, cleverness, sharing, courage).`}
 ${pastTitles.length ? `Already made (don't repeat): ${pastTitles.slice(0, 30).join(', ')}` : ''}
 
 Make it irresistible for kids:
@@ -41,8 +42,12 @@ EMOTIONS: ${EMOTIONS.join(', ')}.
 ACTIONS (on beats, "who" = cast id): enter {from: left|right}, exit {to: left|right}, walk_to {to: left|center|right|<castId>}, run_to {to: ...}, jump, celebrate, wave, point, give {to: castId, item: ${ITEMS.join('|')}}, sleep, wake, think, cry, laugh, angry, scared, fall, fly (crow only), land (crow only).
 Max 3 characters on screen per scene. 3–6 scenes.
 
+Decide which tale you are telling BEFORE writing anything else, and never change your mind mid-way.
+The narrator is NOT a cast member (use "speaker": "narrator"); cast = animals only.
+
 Respond with ONLY valid JSON:
-{"title": "कहानी का नाम", "moral": "सीख (one sentence)", "thumbnailText": "2–4 Hindi words for the thumbnail",
+{"choice": "one line in English: which tale this is",
+ "title": "कहानी का नाम — just the story's name, 2–7 words", "moral": "सीख (one sentence)", "thumbnailText": "2–4 Hindi words for the thumbnail",
  "description": "YouTube description in Hindi + a line in English (under 120 words)", "tags": ["8 tags, mix Hindi and English"],
  "cast": [{"id": "chiku", "species": "rabbit", "name": "चीकू", "voice": "child"}],
  "scenes": [{"background": "meadow", "characters": ["chiku", "kalu"], "beats": [
@@ -60,13 +65,16 @@ function parseJSON(raw) {
 const str = (v, max = 200) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, max) : '');
 
 function validate(raw) {
-  const story = { title: str(raw.title, 80), moral: str(raw.moral, 160), thumbnailText: str(raw.thumbnailText, 40), description: str(raw.description, 900), tags: (Array.isArray(raw.tags) ? raw.tags : []).map(t => str(t, 40)).filter(Boolean).slice(0, 15) };
+  // Keep only the final title if the model corrected itself ("X — नहीं, रुको! Y")
+  let title = str(raw.title, 120);
+  if (/—|–/.test(title) && (/नहीं|रुको|no,|wait/i.test(title) || title.length > 40)) title = title.split(/\s*[—–]\s*/).pop().replace(/^((नहीं|रुको|अरे)[,!।\s]*)+/, '').trim();
+  const story = { title: title.slice(0, 80), moral: str(raw.moral, 160), thumbnailText: str(raw.thumbnailText, 40), description: str(raw.description, 900), tags: (Array.isArray(raw.tags) ? raw.tags : []).map(t => str(t, 40)).filter(Boolean).slice(0, 15) };
   if (!story.title) throw new Error('Story has no title');
   const cast = [];
   for (const c of Array.isArray(raw.cast) ? raw.cast : []) {
     const id = str(c && c.id, 24).toLowerCase().replace(/[^a-z0-9_]/g, '');
     const species = SPECIES.includes(c && c.species) ? c.species : null;
-    if (!id || !species || cast.find(x => x.id === id)) continue;
+    if (!id || id === 'narrator' || !species || cast.find(x => x.id === id)) continue;
     cast.push({ id, species, name: str(c.name, 20) || SPECIES_HI[species], voice: VOICES.includes(c.voice) ? c.voice : DEFAULT_VOICE[species] });
   }
   if (!cast.length) throw new Error('Story has no valid cast');

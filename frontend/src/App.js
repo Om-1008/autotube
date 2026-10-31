@@ -3,6 +3,24 @@ import './App.css';
 
 const API = process.env.REACT_APP_API_URL || 'http://localhost:4000';
 
+// ─── Channels ─────────────────────────────────────────────────────────────────
+const CHANNELS = {
+  finance: {
+    id: 'finance', name: 'WealthSutra', icon: '💰', unit: 'video', accent: '#6c63ff', accent2: '#4f46e5',
+    header: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)', sub: '#a5b4fc',
+  },
+  kids: {
+    id: 'kids', name: 'Kahani Pitara', icon: '📚', unit: 'story', accent: '#e91e63', accent2: '#c2185b',
+    header: 'linear-gradient(135deg, #4a1942 0%, #6b2154 100%)', sub: '#f8bbd0',
+  },
+};
+function initialChannel() {
+  const q = new URLSearchParams(window.location.search).get('channel');
+  if (CHANNELS[q]) return q;
+  try { const saved = localStorage.getItem('autotube.channel'); if (CHANNELS[saved]) return saved; } catch { /* ignore */ }
+  return 'finance';
+}
+
 // ─── Status config ────────────────────────────────────────────────────────────
 const STATUS_CONFIG = {
   generating:       { label: '🧠 Generating script',  color: '#6c63ff', bg: '#f0efff' },
@@ -173,7 +191,8 @@ function ProgressPanel({ video }) {
 }
 
 // ─── Script Modal ──────────────────────────────────────────────────────────────
-function ScriptModal({ video, onClose, onApprove, onReject }) {
+function ScriptModal({ video, onClose, onApprove, onReject, ch }) {
+  const isStory = video.kind === 'story';
   const [rejectReason, setRejectReason] = useState('');
   const [showReject, setShowReject] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -212,6 +231,7 @@ function ScriptModal({ video, onClose, onApprove, onReject }) {
                 <StatusBadge status={video.status} />
                 <span style={{ color: '#888', fontSize: 13 }}>
                   📝 {video.script?.wordCount || '?'} words · ⏱ {video.script?.duration || '~9 min'}
+                  {isStory && video.story && ` · 🐾 ${video.story.cast.map(c => c.name).join(', ')}`}
                 </span>
               </div>
             </div>
@@ -240,6 +260,18 @@ function ScriptModal({ video, onClose, onApprove, onReject }) {
               if (/^#{1,6}\s/.test(t)) {
                 return <h4 key={i} style={{ margin: '18px 0 6px', fontFamily: '-apple-system, sans-serif', color: '#1a1a2e' }}>{t.replace(/^#+\s*/, '')}</h4>;
               }
+              if (isStory) {
+                const m = t.match(/^([^:]{1,24}):\s*(.*)$/);
+                if (m && m[1] === 'सीख') return <div key={i} style={{ marginTop: 18, background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 10, padding: '10px 14px', color: '#065f46', fontWeight: 600 }}>⭐ सीख: {m[2]}</div>;
+                if (m) {
+                  const narrator = m[1] === 'सूत्रधार';
+                  return <p key={i} style={{ margin: '0 0 8px' }}>
+                    <strong style={{ color: narrator ? '#6b7280' : ch.accent, fontFamily: '-apple-system, sans-serif', fontSize: 13 }}>{narrator ? '🎙 ' : '🐾 '}{m[1]}: </strong>
+                    {m[2].replace(/\s*\(सवाल\)$/, '')}
+                    {/\(सवाल\)$/.test(m[2]) && <span style={{ marginLeft: 8, background: '#ede9fe', color: '#6d28d9', borderRadius: 10, padding: '1px 8px', fontSize: 11, fontFamily: '-apple-system, sans-serif' }}>❓ question for kids</span>}
+                  </p>;
+                }
+              }
               if (/^\[PAUSE\]$/i.test(t)) return <div key={i} style={{ textAlign: 'center', color: '#d1d5db', fontSize: 12 }}>— pause —</div>;
               return <p key={i} style={{ margin: '0 0 8px' }}>{t.replace(/\[PAUSE\]/gi, '…')}</p>;
             })}
@@ -247,7 +279,7 @@ function ScriptModal({ video, onClose, onApprove, onReject }) {
 
           {video.script?.thumbnailIdeas?.length > 0 && (
             <div style={{ marginTop: 24, padding: 16, background: '#fffbeb', borderRadius: 10 }}>
-              <strong style={{ fontSize: 13, color: '#92400e' }}>💡 Thumbnail Ideas</strong>
+              <strong style={{ fontSize: 13, color: '#92400e' }}>💡 {isStory ? 'Thumbnail text' : 'Thumbnail Ideas'}</strong>
               <ul style={{ margin: '8px 0 0', paddingLeft: 20, color: '#78350f', fontSize: 13 }}>
                 {video.script.thumbnailIdeas.map((t, i) => <li key={i}>{t}</li>)}
               </ul>
@@ -263,7 +295,7 @@ function ScriptModal({ video, onClose, onApprove, onReject }) {
                   flex: 1, background: 'linear-gradient(135deg, #10b981, #059669)', color: '#fff', border: 'none',
                   borderRadius: 12, padding: '14px 24px', fontSize: 16, fontWeight: 700,
                   cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1,
-                }}>{loading ? '⏳ Starting…' : '✅ Approve & Produce Video'}</button>
+                }}>{loading ? '⏳ Starting…' : isStory ? '✅ Approve & Animate Story' : '✅ Approve & Produce Video'}</button>
                 <button onClick={() => setShowReject(true)} style={{
                   background: '#fff', color: '#ef4444', border: '2px solid #ef4444', borderRadius: 12,
                   padding: '14px 20px', fontSize: 14, fontWeight: 600, cursor: 'pointer',
@@ -293,7 +325,8 @@ const btn = (bg, color = '#fff') => ({
   fontSize: 13, fontWeight: 700, cursor: 'pointer', textDecoration: 'none', display: 'inline-block',
 });
 
-function VideoCard({ video, onOpenScript, onRetry, onDelete }) {
+function VideoCard({ video, onOpenScript, onRetry, onDelete, ch }) {
+  const isStory = video.kind === 'story';
   const date = new Date(video.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
   const active = isActive(video);
   const showProgress = active || (video.stages && ['error', 'rendered'].includes(video.status));
@@ -313,7 +346,7 @@ function VideoCard({ video, onOpenScript, onRetry, onDelete }) {
         {video.wordCount && <span style={{ color: '#aaa', fontSize: 12 }}>📝 {video.wordCount} words</span>}
         {video.stats && (
           <span style={{ color: '#aaa', fontSize: 12 }}>
-            🎬 {Math.floor(video.stats.durationSec / 60)}:{String(video.stats.durationSec % 60).padStart(2, '0')} · {video.stats.shots} shots · {video.stats.sizeMB} MB
+            🎬 {Math.floor(video.stats.durationSec / 60)}:{String(video.stats.durationSec % 60).padStart(2, '0')} · {video.stats.shots} {isStory ? 'scenes' : 'shots'} · {video.stats.sizeMB} MB
           </span>
         )}
       </div>
@@ -339,7 +372,7 @@ function VideoCard({ video, onOpenScript, onRetry, onDelete }) {
       {showProgress && <ProgressPanel video={video} />}
 
       <div style={{ marginTop: 14, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        {video.wordCount > 0 && <button onClick={() => onOpenScript(video.id)} style={btn('#f0efff', '#6c63ff')}>📄 Read Script</button>}
+        {video.wordCount > 0 && <button onClick={() => onOpenScript(video.id)} style={btn('#f0efff', ch.accent)}>{isStory ? '📖 Read Story' : '📄 Read Script'}</button>}
         {video.status === 'pending_approval' && (
           <button onClick={() => onOpenScript(video.id)} style={btn('linear-gradient(135deg, #10b981, #059669)')}>✅ Review & Approve</button>
         )}
@@ -363,6 +396,49 @@ function VideoCard({ video, onOpenScript, onRetry, onDelete }) {
 }
 
 // ─── Settings modal ───────────────────────────────────────────────────────────
+function KidsSettingsModal({ settings, onClose, onSave }) {
+  const [name, setName] = useState(settings.channelName || 'कहानी पिटारा');
+  const [hint, setHint] = useState(settings.storyHint || '');
+  const [days, setDays] = useState(settings.frequencyDays || 2);
+  const [running, setRunning] = useState(settings.isRunning !== false);
+  const [saving, setSaving] = useState(false);
+  const label = { fontSize: 14, margin: '18px 0 4px', color: '#1a1a2e', display: 'block', fontWeight: 700 };
+  const input = { width: '100%', borderRadius: 10, border: '1px solid #ddd', padding: 10, fontSize: 14, fontFamily: 'inherit', boxSizing: 'border-box' };
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+      onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 560, padding: 24, boxShadow: '0 25px 60px rgba(0,0,0,0.3)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h2 style={{ margin: 0, fontSize: 19, color: '#1a1a2e' }}>⚙️ Kahani Pitara settings</h2>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: '#888' }}>×</button>
+        </div>
+        <label style={label}>Name shown on videos</label>
+        <input value={name} onChange={e => setName(e.target.value)} style={input} />
+        <label style={label}>Next story idea <span style={{ fontWeight: 400, color: '#888' }}>(optional)</span></label>
+        <textarea value={hint} onChange={e => setHint(e.target.value)} rows={3} style={{ ...input, resize: 'vertical' }}
+          placeholder="e.g. प्यासा कौआ, or 'a story about sharing toys'. Leave empty and Claude picks a new classic each time." />
+        <div style={{ display: 'flex', gap: 16, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          <div>
+            <label style={label}>New story every</label>
+            <select value={days} onChange={e => setDays(+e.target.value)} style={{ ...input, width: 140 }}>
+              {[1, 2, 3, 4, 7].map(d => <option key={d} value={d}>{d === 1 ? 'day' : `${d} days`}</option>)}
+            </select>
+          </div>
+          <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 14, paddingBottom: 10, cursor: 'pointer' }}>
+            <input type="checkbox" checked={running} onChange={e => setRunning(e.target.checked)} /> Write stories automatically
+          </label>
+        </div>
+        <div style={{ display: 'flex', gap: 10, marginTop: 20, justifyContent: 'flex-end' }}>
+          <button onClick={onClose} style={btn('#f3f4f6', '#555')}>Cancel</button>
+          <button disabled={saving} onClick={async () => {
+            setSaving(true); await onSave({ channelName: name, storyHint: hint, frequencyDays: days, isRunning: running }); setSaving(false); onClose();
+          }} style={btn('linear-gradient(135deg, #e91e63, #c2185b)')}>{saving ? 'Saving…' : 'Save'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SettingsModal({ settings, onClose, onSave }) {
   const [text, setText] = useState(
     (settings.affiliateLinks || []).map(l => `${l.name} | ${l.url}`).join('\n')
@@ -426,6 +502,9 @@ function matches(filter, v) {
 }
 
 export default function App() {
+  const [channel, setChannel] = useState(initialChannel);
+  const ch = CHANNELS[channel];
+  const [yt, setYt] = useState(null);
   const [videos, setVideos] = useState([]);
   const [health, setHealth] = useState(null);
   const [selectedVideo, setSelectedVideo] = useState(null);
@@ -436,9 +515,11 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [toast, setToast] = useState(() => (window.location.search.includes('youtube=connected') ? '✅ YouTube channel connected' : null));
 
+  const api = useCallback((p) => `${API}${p}${p.includes('?') ? '&' : '?'}channel=${channel}`, [channel]);
+
   const fetchData = useCallback(async () => {
     try {
-      const [videosRes, healthRes] = await Promise.all([fetch(`${API}/videos`), fetch(`${API}/health`)]);
+      const [videosRes, healthRes] = await Promise.all([fetch(api('/videos')), fetch(api('/health'))]);
       if (!videosRes.ok) throw new Error(`API ${videosRes.status}`);
       setVideos(await videosRes.json());
       setHealth(await healthRes.json());
@@ -448,7 +529,14 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [api]);
+
+  // Switching channel: clear the list and remember the choice
+  useEffect(() => {
+    setVideos([]); setHealth(null); setLoading(true); setFilter('all'); setYt(null);
+    try { localStorage.setItem('autotube.channel', channel); } catch { /* ignore */ }
+    fetch(api('/auth/youtube/status')).then(r => r.json()).then(setYt).catch(() => setYt(null));
+  }, [channel, api]);
 
   const anyActive = videos.some(isActive);
 
@@ -467,12 +555,12 @@ export default function App() {
   }, [toast]);
 
   async function openScript(id) {
-    const res = await fetch(`${API}/videos/${id}`);
+    const res = await fetch(api(`/videos/${id}`));
     setSelectedVideo(await res.json());
   }
 
   async function post(path, body) {
-    const res = await fetch(`${API}${path}`, {
+    const res = await fetch(api(path), {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined,
     });
     const json = await res.json().catch(() => ({}));
@@ -485,12 +573,12 @@ export default function App() {
   const retryVideo = (id) => post(`/videos/${id}/retry`);
   const rejectVideo = (id, reason) => post(`/videos/${id}/reject`, { reason });
   async function deleteVideo(id) {
-    await fetch(`${API}/videos/${id}`, { method: 'DELETE' });
+    await fetch(api(`/videos/${id}`), { method: 'DELETE' });
     await fetchData();
   }
 
   async function saveSettings(patch) {
-    await fetch(`${API}/settings`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) });
+    await fetch(api('/settings'), { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) });
     setToast('✅ Settings saved');
     await fetchData();
   }
@@ -513,13 +601,21 @@ export default function App() {
 
   return (
     <div style={{ minHeight: '100vh', background: '#f7f8fc', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' }}>
+      <div style={{ background: '#0f0f1e', padding: '10px 32px 0', display: 'flex', gap: 6, flexWrap: 'wrap' }} className="at-pad">
+        {Object.values(CHANNELS).map(c => (
+          <button key={c.id} onClick={() => setChannel(c.id)} style={{
+            background: c.id === channel ? c.header : 'transparent', color: c.id === channel ? '#fff' : '#9ca3af',
+            border: 'none', borderRadius: '10px 10px 0 0', padding: '10px 18px', fontSize: 14, fontWeight: 700, cursor: 'pointer',
+          }}>{c.icon} {c.name}</button>
+        ))}
+      </div>
       <div style={{
-        background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)', color: '#fff', padding: '20px 32px',
+        background: ch.header, color: '#fff', padding: '20px 32px',
         display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, flexWrap: 'wrap',
       }} className="at-pad">
         <div>
           <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800 }}>
-            🎬 AutoTube
+            {ch.icon} {ch.name}
             {pendingCount > 0 && (
               <span style={{ marginLeft: 10, background: '#f59e0b', color: '#1a1a2e', borderRadius: 20, padding: '2px 10px', fontSize: 14, fontWeight: 700 }}>
                 {pendingCount} need review
@@ -527,7 +623,11 @@ export default function App() {
             )}
           </h1>
           <p style={{ margin: '4px 0 0', color: '#8899bb', fontSize: 13 }}>
-            {health?.settings?.niche ? health.settings.niche.replace(/\b\w/g, c => c.toUpperCase()) : 'Personal Finance'} · Next video: <strong style={{ color: '#a5b4fc' }}>{nextRun}</strong>
+            {channel === 'kids' ? 'Hindi kids stories' : (health?.settings?.niche ? health.settings.niche.replace(/\b\w/g, c => c.toUpperCase()) : 'Personal Finance')}
+            {' · '}{health?.settings?.isRunning === false ? 'Auto-generate paused' : <>Next {ch.unit}: <strong style={{ color: ch.sub }}>{nextRun}</strong></>}
+            {' · '}{yt?.connected
+              ? <span style={{ color: '#86efac' }}>▶ {yt.channel?.name || 'YouTube connected'}</span>
+              : <a href={api('/auth/youtube')} style={{ color: '#fcd34d', fontWeight: 700 }}>🔗 Connect YouTube</a>}
           </p>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
@@ -536,12 +636,12 @@ export default function App() {
           borderRadius: 10, padding: '10px 14px', fontSize: 14, fontWeight: 600, cursor: 'pointer',
         }}>⚙️ Settings</button>
         <button onClick={triggerPipeline} disabled={starting || generatingNow} style={{
-          background: starting || generatingNow ? '#4b5563' : 'linear-gradient(135deg, #6c63ff, #4f46e5)',
+          background: starting || generatingNow ? '#4b5563' : `linear-gradient(135deg, ${ch.accent}, ${ch.accent2})`,
           color: '#fff', border: 'none', borderRadius: 10, padding: '10px 20px', fontSize: 14, fontWeight: 700,
           cursor: starting || generatingNow ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', gap: 8,
         }}>
           {(starting || generatingNow) && <span className="at-spinner" style={{ borderColor: '#9ca3af', borderTopColor: '#fff' }} />}
-          {starting ? 'Starting…' : generatingNow ? 'Generating script…' : '⚡ Generate Now'}
+          {starting ? 'Starting…' : generatingNow ? (channel === 'kids' ? 'Writing story…' : 'Generating script…') : (channel === 'kids' ? '⚡ New Story' : '⚡ Generate Now')}
         </button>
         </div>
       </div>
@@ -555,7 +655,7 @@ export default function App() {
 
       <div style={{ padding: '16px 32px', display: 'flex', gap: 16, flexWrap: 'wrap' }} className="at-pad">
         {[
-          { label: 'Total Videos', value: videos.length, icon: '📹' },
+          { label: channel === 'kids' ? 'Total Stories' : 'Total Videos', value: videos.length, icon: ch.icon },
           { label: 'Pending Review', value: pendingCount, icon: '⏳', highlight: pendingCount > 0 },
           { label: 'In Progress', value: activeCount, icon: '⚙️', live: activeCount > 0 },
           { label: 'Live on YouTube', value: videos.filter(v => v.status === 'uploaded').length, icon: '🎉' },
@@ -575,8 +675,8 @@ export default function App() {
       <div style={{ padding: '0 32px 16px', display: 'flex', gap: 8, flexWrap: 'wrap' }} className="at-pad">
         {FILTERS.map(f => (
           <button key={f.key} onClick={() => setFilter(f.key)} style={{
-            background: filter === f.key ? '#6c63ff' : '#fff', color: filter === f.key ? '#fff' : '#666',
-            border: '1px solid ' + (filter === f.key ? '#6c63ff' : '#ddd'), borderRadius: 20,
+            background: filter === f.key ? ch.accent : '#fff', color: filter === f.key ? '#fff' : '#666',
+            border: '1px solid ' + (filter === f.key ? ch.accent : '#ddd'), borderRadius: 20,
             padding: '6px 16px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
           }}>{f.label}</button>
         ))}
@@ -587,21 +687,22 @@ export default function App() {
         {!loading && filtered.length === 0 && (
           <div style={{ background: '#fff', borderRadius: 14, padding: 40, textAlign: 'center', color: '#888' }}>
             {videos.length === 0
-              ? <><div style={{ fontSize: 48 }}>🎬</div><h3 style={{ color: '#1a1a2e' }}>No videos yet</h3><p>Click <strong>⚡ Generate Now</strong> to create your first video.</p></>
+              ? <><div style={{ fontSize: 48 }}>{ch.icon}</div><h3 style={{ color: '#1a1a2e' }}>No {ch.unit === 'story' ? 'stories' : 'videos'} yet</h3><p>Click <strong>{channel === 'kids' ? '⚡ New Story' : '⚡ Generate Now'}</strong> to create the first one.</p></>
               : 'No videos match this filter.'}
           </div>
         )}
         {filtered.map(v => (
-          <VideoCard key={v.id} video={v} onOpenScript={openScript} onRetry={retryVideo} onDelete={deleteVideo} />
+          <VideoCard key={v.id} video={v} ch={ch} onOpenScript={openScript} onRetry={retryVideo} onDelete={deleteVideo} />
         ))}
       </div>
 
-      {showSettings && health?.settings && (
-        <SettingsModal settings={health.settings} onClose={() => setShowSettings(false)} onSave={saveSettings} />
+      {showSettings && health?.settings && health.channel === channel && (channel === 'kids'
+        ? <KidsSettingsModal settings={health.settings} onClose={() => setShowSettings(false)} onSave={saveSettings} />
+        : <SettingsModal settings={health.settings} onClose={() => setShowSettings(false)} onSave={saveSettings} />
       )}
 
       {selectedVideo && (
-        <ScriptModal video={selectedVideo} onClose={() => setSelectedVideo(null)} onApprove={approveVideo} onReject={rejectVideo} />
+        <ScriptModal video={selectedVideo} ch={ch} onClose={() => setSelectedVideo(null)} onApprove={approveVideo} onReject={rejectVideo} />
       )}
     </div>
   );

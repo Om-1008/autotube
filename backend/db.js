@@ -6,21 +6,39 @@ const fs = require('fs');
 const path = require('path');
 const redis = require('./redis');
 
-const DB_FILE = path.join(__dirname, 'data.json');
-const DB_KEY = 'autotube:data';
-
-const DEFAULT = () => ({
-  videos: [],
-  settings: {
-    niche: process.env.CHANNEL_NICHE || 'personal finance',
-    audience: process.env.CHANNEL_AUDIENCE || 'global English',
-    frequencyDays: parseInt(process.env.VIDEO_FREQUENCY_DAYS || '2'),
-    voiceId: '',
-    publishHour: 18,
-    isRunning: true,
+// Each channel is fully separate: its own history, settings and schedule.
+// The finance channel keeps its original key so existing history is untouched.
+const CHANNELS = {
+  finance: {
+    key: 'autotube:data', file: 'data.json',
+    defaults: () => ({
+      niche: process.env.CHANNEL_NICHE || 'personal finance',
+      audience: process.env.CHANNEL_AUDIENCE || 'global English',
+      frequencyDays: parseInt(process.env.VIDEO_FREQUENCY_DAYS || '2'),
+      voiceId: '',
+      publishHour: 18,
+      isRunning: true,
+    }),
   },
-  nextGenerateAt: null,
-});
+  kids: {
+    key: 'autotube:kids:data', file: 'data-kids.json',
+    defaults: () => ({
+      channelName: process.env.KIDS_CHANNEL_NAME || 'कहानी पिटारा',
+      frequencyDays: parseInt(process.env.KIDS_FREQUENCY_DAYS || '2'),
+      storyHint: '',
+      publishHour: 18,
+      isRunning: true,
+    }),
+  },
+};
+const CHANNEL_IDS = Object.keys(CHANNELS);
+
+function createStore(channel) {
+const cfg = CHANNELS[channel];
+if (!cfg) throw new Error(`Unknown channel: ${channel}`);
+const DB_FILE = path.join(__dirname, cfg.file);
+const DB_KEY = cfg.key;
+const DEFAULT = () => ({ videos: [], settings: cfg.defaults(), nextGenerateAt: null });
 
 let _cache = null;
 
@@ -71,21 +89,21 @@ function fileSave(data) {
 
 async function init() {
   if (redis.enabled) {
-    console.log('[DB] Connecting to Upstash Redis...');
+    console.log(`[DB:${channel}] Connecting to Upstash Redis...`);
     let raw = null;
     try { raw = await redis.getJSON(DB_KEY); }
     catch (e) { console.error('[DB] Redis GET error:', e.message); }
 
     const { data, nestedLevels } = recover(raw || {});
     _cache = data;
-    console.log(`[DB] Loaded from Redis: ${_cache.videos.length} videos`);
+    console.log(`[DB:${channel}] Loaded from Redis: ${_cache.videos.length} videos`);
     if (nestedLevels > 1) {
       console.log(`[DB] Recovered history from ${nestedLevels} legacy-wrapped levels — rewriting clean copy`);
       await redis.setJSON(DB_KEY, _cache);
     }
     fileSave(_cache);
   } else {
-    console.log('[DB] Using local file (data.json)');
+    console.log(`[DB:${channel}] Using local file (${cfg.file})`);
     _cache = fileLoad();
   }
 }
@@ -112,4 +130,23 @@ async function update(fn) {
   return _cache;
 }
 
-module.exports = { get, update, init, loadFresh, recover };
+return { channel, get, update, init, loadFresh, recover };
+}
+
+const stores = Object.fromEntries(CHANNEL_IDS.map(c => [c, createStore(c)]));
+const of = (channel) => stores[channel] || stores.finance;
+
+module.exports = {
+  ...stores.finance,                 // backwards compatible: db.get() etc. = finance
+  of, CHANNEL_IDS,
+  initAll: () => Promise.all(Object.values(stores).map(s => s.init())),
+  // Find a job in any channel (render worker only gets the job id)
+  async findJob(jobId) {
+    for (const c of CHANNEL_IDS) {
+      const data = await stores[c].loadFresh();
+      const job = data.videos.find(v => v.id === jobId);
+      if (job) return { channel: c, job, settings: data.settings };
+    }
+    return null;
+  },
+};
