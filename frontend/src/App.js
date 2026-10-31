@@ -626,7 +626,10 @@ export default function App() {
             {channel === 'kids' ? 'Hindi kids stories' : (health?.settings?.niche ? health.settings.niche.replace(/\b\w/g, c => c.toUpperCase()) : 'Personal Finance')}
             {' · '}{health?.settings?.isRunning === false ? 'Auto-generate paused' : <>Next {ch.unit}: <strong style={{ color: ch.sub }}>{nextRun}</strong></>}
             {' · '}{yt?.connected
-              ? <span style={{ color: '#86efac' }}>▶ {yt.channel?.name || 'YouTube connected'}</span>
+              ? <>
+                  <span style={{ color: '#86efac' }}>▶ {yt.channel?.name || 'YouTube connected'}</span>
+                  {yt.needsReconnect && <> · <a href={api('/auth/youtube')} style={{ color: '#fcd34d', fontWeight: 700 }} title="Needed once so uploads can include subtitles">🔄 Reconnect YouTube to enable subtitles</a></>}
+                </>
               : <a href={api('/auth/youtube')} style={{ color: '#fcd34d', fontWeight: 700 }}>🔗 Connect YouTube</a>}
           </p>
         </div>

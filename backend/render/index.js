@@ -46,9 +46,20 @@ async function processJob(job, reporter, { workDir, upload = true } = {}) {
   }
   await reporter.stage('uploading', `${sizeMB} MB`);
   const links = ((job.settings && job.settings.affiliateLinks) || []).filter(l => l && l.name && /^https?:\/\//.test(l.url || ''));
-  const { videoId, videoUrl, thumbnailSet } = await yt.uploadVideo(outPath, { ...job.script, title, chapters, links }, {
+  const seo = require('../seo');
+  const captions = [{ lang: 'en', name: 'English', srt: seo.toSrt(seo.cuesFromLines(tts.timeline)) }];
+  const kw = (job.topic && job.topic.searchKeywords) || [];
+  const { videoId, videoUrl, thumbnailSet } = await yt.uploadVideo(outPath, {
+    ...job.script, title, chapters, links, captions,
+    searchQueries: kw.length ? kw.slice(0, 2) : [title],
+    seoContext: `${niche} explainer video: "${title}". ${(job.topic && job.topic.hook) || ''}`,
+    hashtags: ['#PersonalFinance', '#MoneyTips', '#FinancialFreedom'],
+    playlist: { title: process.env.FINANCE_PLAYLIST || 'Personal Finance Basics | WealthSutra', description: 'Simple, practical money guides: saving, budgeting, investing and building wealth.' },
+  }, {
+    channel: job.channel || 'finance',
     thumbnailPath: fs.existsSync(thumbPath) ? thumbPath : null,
     onProgress: p => reporter.progress(p, `Uploaded ${p}%`),
+    log: m => reporter.log(m),
   });
   if (!thumbnailSet) reporter.log('Custom thumbnail not applied (needs a phone-verified YouTube channel)');
   reporter.log(`🎉 Live on YouTube: ${videoUrl}`);

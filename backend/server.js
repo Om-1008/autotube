@@ -482,7 +482,8 @@ app.get('/auth/youtube/revoke', async (req, res) => {
 app.get('/auth/youtube/status', async (req, res) => {
   const channel = chOf(req);
   if (!(await yt.isYouTubeConnected(channel))) return res.json({ connected: false });
-  try { res.json({ connected: true, channel: await yt.getChannelInfo(channel) }); }
+  const missing = await yt.missingScopes(channel).catch(() => []);
+  try { res.json({ connected: true, needsReconnect: missing.length > 0, missing, channel: await yt.getChannelInfo(channel) }); }
   catch (e) { res.json({ connected: true, channel: null, error: e.message }); }
 });
 

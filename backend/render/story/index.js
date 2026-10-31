@@ -3,6 +3,7 @@
 const fs = require('fs');
 const { buildStoryAudio } = require('./audio');
 const { renderStory } = require('./render');
+const { youtubeTitle } = require('./writer');
 
 async function processStoryJob(job, reporter, { workDir, upload = true } = {}) {
   const story = job.story;
@@ -27,9 +28,23 @@ async function processStoryJob(job, reporter, { workDir, upload = true } = {}) {
     return { outPath: videoPath, thumbPath, stats };
   }
   await reporter.stage('uploading', `${sizeMB} MB`);
+  const seo = require('../../seo');
+  // Subtitles: Hindi exactly as spoken, plus an English translation
+  const spoken = audio.lines.filter(l => l.text && l.end > l.start);
+  const captions = [{ lang: 'hi', name: 'हिंदी', srt: seo.toSrt(seo.cuesFromLines(spoken)) }];
+  try {
+    const en = await seo.translateLines(spoken.map(l => l.text), 'English', 'These are lines from a Hindi animated story for young children.');
+    if (en) captions.push({ lang: 'en', name: 'English', srt: seo.toSrt(seo.cuesFromLines(spoken.map((l, i) => ({ ...l, text: en[i] })))) });
+  } catch (e) { reporter.log(`English subtitles skipped (${e.message.slice(0, 80)})`); }
+  const title = youtubeTitle({ ...story, title: job.title || story.title });
+  const castNames = story.cast.map(c => `${c.name} (${c.species})`).join(', ');
   const { videoId, videoUrl, thumbnailSet } = await yt.uploadVideo(videoPath, {
-    kids: true, title: job.title || story.title, description: story.description, tags: story.tags, moral: story.moral,
-  }, { channel: 'kids', thumbnailPath: thumbPath, onProgress: p => reporter.progress(p, `Uploaded ${p}%`) });
+    kids: true, title, description: story.description, tags: story.tags, moral: story.moral, captions,
+    searchQueries: story.searchQueries && story.searchQueries.length ? story.searchQueries : [`${story.englishTitle || story.title} story in hindi`],
+    seoContext: `Hindi animated moral story for kids aged 3-8: "${story.title}"${story.englishTitle ? ` (${story.englishTitle})` : ''}. Characters: ${castNames}. Moral: ${story.moral}`,
+    hashtags: ['#HindiKahani', '#Panchatantra', '#MoralStories', '#BachonKiKahani'],
+    playlist: { title: process.env.KIDS_PLAYLIST || 'पंचतंत्र की कहानियाँ | Panchatantra Stories in Hindi', description: 'बच्चों के लिए प्यारी हिंदी कहानियाँ — हर कहानी में एक सीख। Animated Hindi moral stories for kids.' },
+  }, { channel: 'kids', thumbnailPath: thumbPath, onProgress: p => reporter.progress(p, `Uploaded ${p}%`), log: m => reporter.log(m) });
   if (!thumbnailSet) reporter.log('Custom thumbnail not applied (needs a phone-verified YouTube channel)');
   reporter.log(`🎉 Live on YouTube: ${videoUrl}`);
   await reporter.done('uploaded', { stats, youtubeId: videoId, youtubeUrl: videoUrl, uploadedAt: new Date().toISOString() });

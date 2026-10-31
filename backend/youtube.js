@@ -3,7 +3,16 @@
 // readable by the GitHub Actions render worker.
 const fs = require('fs');
 const { google } = require('googleapis');
+const { Readable } = require('stream');
 const redis = require('./redis');
+const seo = require('./seo');
+
+// youtube.force-ssl is needed for uploading subtitle tracks
+const SCOPES = [
+  'https://www.googleapis.com/auth/youtube.upload',
+  'https://www.googleapis.com/auth/youtube',
+  'https://www.googleapis.com/auth/youtube.force-ssl',
+];
 
 // One YouTube login per channel (finance keeps its original key)
 const TOKEN_KEYS = { finance: 'autotube:youtube_tokens', kids: 'autotube:kids:youtube_tokens' };
@@ -56,10 +65,7 @@ function getAuthUrl(channel = 'finance') {
   return getOAuthClient().generateAuthUrl({
     state: channel,
     access_type: 'offline',
-    scope: [
-      'https://www.googleapis.com/auth/youtube.upload',
-      'https://www.googleapis.com/auth/youtube',
-    ],
+    scope: SCOPES,
     prompt: 'consent',
   });
 }
@@ -72,6 +78,13 @@ async function exchangeCodeForTokens(code, channel) {
 
 async function isYouTubeConnected(channel) {
   return !!(await loadTokens(channel));
+}
+
+// Logins made before subtitles were added lack the captions scope → ask to reconnect
+async function missingScopes(channel) {
+  const t = await loadTokens(channel);
+  if (!t || !t.scope) return [];
+  return SCOPES.filter(sc => !t.scope.split(' ').includes(sc)).map(sc => sc.split('/').pop());
 }
 
 function fmtTime(sec) {
@@ -101,6 +114,7 @@ function buildDescription(scriptData) {
   }
   if (scriptData.kids) {
     if (scriptData.moral) parts.push('', `🌟 सीख: ${scriptData.moral}`);
+    parts.push('', 'हिंदी और English subtitles उपलब्ध हैं (CC).');
     parts.push('', '---------------------------------', 'Animated with AI assistance (story and voices).');
   } else {
     parts.push(
@@ -111,11 +125,13 @@ function buildDescription(scriptData) {
       'Always consult a qualified financial advisor before investing.',
     );
   }
-  return parts.join('\n').slice(0, 4900);
+  const hashtags = (scriptData.hashtags || []).slice(0, 5);
+  const body2 = parts.join('\n').slice(0, 4800);
+  return hashtags.length ? `${body2}\n\n${hashtags.join(' ')}` : body2;
 }
 
 // Upload a rendered MP4. Does not touch the DB — caller records the result.
-async function uploadVideo(videoPath, scriptData, { onProgress, thumbnailPath, channel } = {}) {
+async function uploadVideo(videoPath, scriptData, { onProgress, thumbnailPath, channel, log = () => {} } = {}) {
   if (!process.env.YOUTUBE_CLIENT_ID || !process.env.YOUTUBE_CLIENT_SECRET) {
     throw new Error('YouTube OAuth credentials not set (YOUTUBE_CLIENT_ID / YOUTUBE_CLIENT_SECRET)');
   }
@@ -123,15 +139,29 @@ async function uploadVideo(videoPath, scriptData, { onProgress, thumbnailPath, c
   const youtube = google.youtube({ version: 'v3', auth });
   const fileSize = fs.statSync(videoPath).size;
   const kids = !!scriptData.kids;
-  const tags = [...(scriptData.tags || []),
-    ...(kids ? ['hindi kahani', 'bachon ki kahani', 'panchatantra', 'moral stories', 'हिंदी कहानियाँ'] : ['personal finance', 'money', 'investing', 'financial freedom', 'finance tips', '2026'])]
-    .filter((t, i, a) => t && a.indexOf(t) === i).slice(0, 30);
+  const lang = kids ? 'hi' : 'en';
+
+  // Tags: ours first, then the relevant tags of the top-viewed recent videos on this topic
+  let researched = [];
+  try {
+    researched = await seo.researchTags(youtube, {
+      queries: scriptData.searchQueries && scriptData.searchQueries.length ? scriptData.searchQueries : [scriptData.title],
+      lang, region: kids ? 'IN' : undefined, context: scriptData.seoContext || scriptData.title, log,
+    });
+    if (researched.length) log(`Added ${researched.length} tags used by top videos: ${researched.slice(0, 8).join(', ')}${researched.length > 8 ? '…' : ''}`);
+  } catch (e) {
+    log(`Tag research skipped (${e.message.slice(0, 120)})`);
+  }
+  const defaults = kids
+    ? ['hindi kahani', 'hindi kahaniya', 'bachon ki kahani', 'panchatantra ki kahaniyan', 'moral stories in hindi', 'हिंदी कहानियाँ', 'kids stories in hindi', 'cartoon kahani']
+    : ['personal finance', 'money tips', 'investing for beginners', 'financial freedom', 'how to save money', String(new Date().getFullYear())];
+  const tags = seo.mergeTags(scriptData.tags || [], researched, defaults);
 
   const res = await youtube.videos.insert({
     part: ['snippet', 'status'],
     requestBody: {
       snippet: {
-        title: (scriptData.title || 'Personal finance').slice(0, 100),
+        title: String(scriptData.title || 'Personal finance').replace(/[<>]/g, '').slice(0, 100),
         description: buildDescription(scriptData),
         tags,
         categoryId: kids ? '1' : '27',
@@ -169,7 +199,47 @@ async function uploadVideo(videoPath, scriptData, { onProgress, thumbnailPath, c
     }
   }
 
-  return { videoId, videoUrl: `https://youtu.be/${videoId}`, thumbnailSet };
+  // Subtitles (searchable text + accessibility)
+  for (const c of scriptData.captions || []) {
+    try {
+      await youtube.captions.insert({
+        part: ['snippet'],
+        requestBody: { snippet: { videoId, language: c.lang, name: c.name, isDraft: false } },
+        media: { mimeType: 'application/octet-stream', body: Readable.from([c.srt]) },
+      });
+      log(`Subtitles added: ${c.name}`);
+    } catch (e) {
+      log(`⚠️ Subtitles (${c.name}) not added: ${/insufficient|scope|permission/i.test(e.message) ? 'reconnect YouTube from the dashboard to allow subtitles' : e.message.slice(0, 120)}`);
+    }
+  }
+
+  // Playlist (keeps viewers watching the next video)
+  if (scriptData.playlist && scriptData.playlist.title) {
+    try {
+      const playlistId = await ensurePlaylist(youtube, scriptData.playlist, lang);
+      await youtube.playlistItems.insert({ part: ['snippet'], requestBody: { snippet: { playlistId, resourceId: { kind: 'youtube#video', videoId } } } });
+      log(`Added to playlist “${scriptData.playlist.title}”`);
+    } catch (e) {
+      log(`⚠️ Playlist not updated: ${e.message.slice(0, 120)}`);
+    }
+  }
+
+  return { videoId, videoUrl: `https://youtu.be/${videoId}`, thumbnailSet, tags };
+}
+
+async function ensurePlaylist(youtube, { title, description }, lang) {
+  let pageToken;
+  do {
+    const r = await youtube.playlists.list({ part: ['snippet'], mine: true, maxResults: 50, pageToken });
+    const hit = (r.data.items || []).find(p => p.snippet.title === title);
+    if (hit) return hit.id;
+    pageToken = r.data.nextPageToken;
+  } while (pageToken);
+  const created = await youtube.playlists.insert({
+    part: ['snippet', 'status'],
+    requestBody: { snippet: { title, description: description || '', defaultLanguage: lang }, status: { privacyStatus: 'public' } },
+  });
+  return created.data.id;
 }
 
 async function getChannelInfo(channelId) {
@@ -190,5 +260,5 @@ async function getChannelInfo(channelId) {
 
 module.exports = {
   getAuthUrl, exchangeCodeForTokens, uploadVideo,
-  isYouTubeConnected, getChannelInfo, clearTokens,
+  isYouTubeConnected, getChannelInfo, clearTokens, missingScopes, buildDescription,
 };

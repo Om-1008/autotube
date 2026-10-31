@@ -47,7 +47,9 @@ The narrator is NOT a cast member (use "speaker": "narrator"); cast = animals on
 
 Respond with ONLY valid JSON:
 {"choice": "one line in English: which tale this is",
- "title": "कहानी का नाम — just the story's name, 2–7 words", "moral": "सीख (one sentence)", "thumbnailText": "2–4 Hindi words for the thumbnail",
+ "title": "कहानी का नाम — just the story's name, 2–7 words",
+ "englishTitle": "The story's usual English name, e.g. The Lion and the Mouse",
+ "searchQueries": ["2–3 phrases parents actually type to find this story, e.g. 'sher aur chuha ki kahani', 'lion and mouse story in hindi'"], "moral": "सीख (one sentence)", "thumbnailText": "2–4 Hindi words for the thumbnail",
  "description": "YouTube description in Hindi + a line in English (under 120 words)", "tags": ["8 tags, mix Hindi and English"],
  "cast": [{"id": "chiku", "species": "rabbit", "name": "चीकू", "voice": "child"}],
  "scenes": [{"background": "meadow", "characters": ["chiku", "kalu"], "beats": [
@@ -68,7 +70,8 @@ function validate(raw) {
   // Keep only the final title if the model corrected itself ("X — नहीं, रुको! Y")
   let title = str(raw.title, 120);
   if (/—|–/.test(title) && (/नहीं|रुको|no,|wait/i.test(title) || title.length > 40)) title = title.split(/\s*[—–]\s*/).pop().replace(/^((नहीं|रुको|अरे)[,!।\s]*)+/, '').trim();
-  const story = { title: title.slice(0, 80), moral: str(raw.moral, 160), thumbnailText: str(raw.thumbnailText, 40), description: str(raw.description, 900), tags: (Array.isArray(raw.tags) ? raw.tags : []).map(t => str(t, 40)).filter(Boolean).slice(0, 15) };
+  const story = { title: title.slice(0, 80), englishTitle: str(raw.englishTitle, 60).replace(/[|<>]/g, ''),
+    searchQueries: (Array.isArray(raw.searchQueries) ? raw.searchQueries : []).map(q => str(q, 60)).filter(Boolean).slice(0, 3), moral: str(raw.moral, 160), thumbnailText: str(raw.thumbnailText, 40), description: str(raw.description, 900), tags: (Array.isArray(raw.tags) ? raw.tags : []).map(t => str(t, 40)).filter(Boolean).slice(0, 15) };
   if (!story.title) throw new Error('Story has no title');
   const cast = [];
   for (const c of Array.isArray(raw.cast) ? raw.cast : []) {
@@ -132,4 +135,13 @@ function storyToScript(story) {
   return lines.join('\n');
 }
 
-module.exports = { writeStory, validate, storyToScript, SPECIES, BACKGROUNDS, VOICES, DEFAULT_VOICE };
+// Searchable YouTube title: Hindi name | English name … in Hindi | Panchatantra Kahani (≤100 chars)
+function youtubeTitle(story) {
+  const t = story.title.replace(/[|<>]/g, '').trim();
+  const options = story.englishTitle
+    ? [`${t} | ${story.englishTitle} Story in Hindi | Panchatantra Kahani`, `${t} | ${story.englishTitle} Story in Hindi`, `${t} | Hindi Kahani`]
+    : [`${t} | Hindi Kahani | Moral Story for Kids`, `${t} | Hindi Kahani`];
+  return (options.find(o => o.length <= 100) || t).slice(0, 100);
+}
+
+module.exports = { writeStory, validate, storyToScript, youtubeTitle, SPECIES, BACKGROUNDS, VOICES, DEFAULT_VOICE };

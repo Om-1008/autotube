@@ -45,6 +45,17 @@ and uploads it as **made for kids**, Hindi, Film & Animation. Code: `backend/ren
 Connect its YouTube channel from the dashboard (Kahani Pitara tab → 🔗 Connect YouTube), or
 `https://<render-app>/auth/youtube?channel=kids`. In Google's account picker choose the Kahani Pitara channel.
 
+## Discoverability (every upload, both channels)
+
+- **Tags from top videos:** at upload the worker searches YouTube for the topic (most-viewed videos of the last 2 years),
+  collects their tags and lets Claude keep only those that honestly describe our video (no other channels' names).
+  Merged with our own tags inside YouTube's 500-character limit. Costs ~200 of the 10,000 daily API quota units.
+- **Subtitles:** English for finance; Hindi (exact narration) + English (Claude translation) for stories.
+  Needs the `youtube.force-ssl` scope: logins made before this was added show "🔄 Reconnect YouTube" on the dashboard.
+- **Playlists:** each upload is added to `Personal Finance Basics | WealthSutra` or
+  `पंचतंत्र की कहानियाँ | Panchatantra Stories in Hindi` (created automatically; override with `FINANCE_PLAYLIST` / `KIDS_PLAYLIST`).
+- **Hashtags** at the end of every description; **story titles** like `शेर और चूहा | The Lion and the Mouse Story in Hindi | Panchatantra Kahani`.
+
 ## Setup checklist
 
 ### Render (API server) — environment variables
