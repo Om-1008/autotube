@@ -45,6 +45,15 @@ and uploads it as **made for kids**, Hindi, Film & Animation. Code: `backend/ren
 Connect its YouTube channel from the dashboard (Kahani Pitara tab → 🔗 Connect YouTube), or
 `https://<render-app>/auth/youtube?channel=kids`. In Google's account picker choose the Kahani Pitara channel.
 
+## Trending or normal (every Generate click)
+
+**Generate / New Story** asks: **📈 Use what's trending** or **🌿 Normal**.
+Trending (`backend/trends.js`): videos in the niche from the last 14 days ranked by views/day (YouTube API, via the channel's
+login) + Claude web search (this week's money news; for stories, upcoming Indian festivals and special days) → Claude picks a
+rising topic, the dashboard shows why (with sources), and finance scripts get the sourced facts. Any failure falls back to Normal.
+Scheduled runs use Normal unless Settings → "Scheduled … use trending topics" is on. `TREND_MODEL` default `claude-sonnet-4-6`
+(~2–3 web searches per pick, ≈ $0.02–0.03).
+
 ## Discoverability (every upload, both channels)
 
 - **Tags from top videos:** at upload the worker searches YouTube for the topic (most-viewed videos of the last 2 years),

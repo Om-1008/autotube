@@ -239,6 +239,8 @@ function ScriptModal({ video, onClose, onApprove, onReject, ch }) {
           </div>
         </div>
 
+        {video.trend && <div style={{ padding: '0 28px' }} className="at-pad"><TrendNote trend={video.trend} /></div>}
+
         {sections.length > 0 && (
           <div style={{ padding: '12px 28px 0', borderBottom: '1px solid #f0f0f0', flexShrink: 0 }} className="at-pad">
             <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 12 }}>
@@ -342,6 +344,7 @@ function VideoCard({ video, onOpenScript, onRetry, onDelete, ch }) {
       <h3 style={{ margin: '0 0 8px', fontSize: 16, color: '#1a1a2e', lineHeight: 1.4 }}>{video.title}</h3>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
         <StatusBadge status={video.status} />
+        {video.trending && <span style={{ background: '#fff7ed', color: '#c2410c', border: '1px solid #fdba74', padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 700 }}>📈 Trending</span>}
         <span style={{ color: '#aaa', fontSize: 12 }}>{date}</span>
         {video.wordCount && <span style={{ color: '#aaa', fontSize: 12 }}>📝 {video.wordCount} words</span>}
         {video.stats && (
@@ -357,6 +360,8 @@ function VideoCard({ video, onOpenScript, onRetry, onDelete, ch }) {
           WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
         }}>{video.scriptPreview.replace(/\[[^\]]*\]|#+\s|\*\*/g, ' ').replace(/\s+/g, ' ')}</p>
       )}
+
+      {video.trend && !active && <TrendNote trend={video.trend} compact />}
 
       {video.status === 'error' && video.error && (
         <div style={{ marginTop: 12, background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', borderRadius: 8, padding: '8px 12px', fontSize: 13 }}>
@@ -401,6 +406,7 @@ function KidsSettingsModal({ settings, onClose, onSave }) {
   const [hint, setHint] = useState(settings.storyHint || '');
   const [days, setDays] = useState(settings.frequencyDays || 2);
   const [running, setRunning] = useState(settings.isRunning !== false);
+  const [schedTrend, setSchedTrend] = useState(!!settings.scheduledTrending);
   const [saving, setSaving] = useState(false);
   const label = { fontSize: 14, margin: '18px 0 4px', color: '#1a1a2e', display: 'block', fontWeight: 700 };
   const input = { width: '100%', borderRadius: 10, border: '1px solid #ddd', padding: 10, fontSize: 14, fontFamily: 'inherit', boxSizing: 'border-box' };
@@ -428,10 +434,13 @@ function KidsSettingsModal({ settings, onClose, onSave }) {
             <input type="checkbox" checked={running} onChange={e => setRunning(e.target.checked)} /> Write stories automatically
           </label>
         </div>
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 14, marginTop: 12, cursor: 'pointer' }}>
+          <input type="checkbox" checked={schedTrend} onChange={e => setSchedTrend(e.target.checked)} /> 📈 Scheduled stories use trending topics &amp; upcoming occasions
+        </label>
         <div style={{ display: 'flex', gap: 10, marginTop: 20, justifyContent: 'flex-end' }}>
           <button onClick={onClose} style={btn('#f3f4f6', '#555')}>Cancel</button>
           <button disabled={saving} onClick={async () => {
-            setSaving(true); await onSave({ channelName: name, storyHint: hint, frequencyDays: days, isRunning: running }); setSaving(false); onClose();
+            setSaving(true); await onSave({ channelName: name, storyHint: hint, frequencyDays: days, isRunning: running, scheduledTrending: schedTrend }); setSaving(false); onClose();
           }} style={btn('linear-gradient(135deg, #e91e63, #c2185b)')}>{saving ? 'Saving…' : 'Save'}</button>
         </div>
       </div>
@@ -444,6 +453,7 @@ function SettingsModal({ settings, onClose, onSave }) {
     (settings.affiliateLinks || []).map(l => `${l.name} | ${l.url}`).join('\n')
   );
   const [saving, setSaving] = useState(false);
+  const [schedTrend, setSchedTrend] = useState(!!settings.scheduledTrending);
   const parsed = text.split('\n').map(l => l.trim()).filter(Boolean).map(l => {
     const [name, ...rest] = l.split('|');
     return { name: (name || '').trim(), url: rest.join('|').trim() };
@@ -472,15 +482,69 @@ function SettingsModal({ settings, onClose, onSave }) {
             {invalid.length} line(s) need the form “Name | https://…”
           </div>
         )}
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 14, marginTop: 16, cursor: 'pointer' }}>
+          <input type="checkbox" checked={schedTrend} onChange={e => setSchedTrend(e.target.checked)} /> 📈 Scheduled videos use trending topics
+        </label>
         <div style={{ display: 'flex', gap: 10, marginTop: 16, justifyContent: 'flex-end' }}>
           <button onClick={onClose} style={btn('#f3f4f6', '#555')}>Cancel</button>
           <button disabled={saving || invalid.length > 0} onClick={async () => {
-            setSaving(true); await onSave({ affiliateLinks: parsed }); setSaving(false); onClose();
+            setSaving(true); await onSave({ affiliateLinks: parsed, scheduledTrending: schedTrend }); setSaving(false); onClose();
           }} style={{ ...btn('linear-gradient(135deg, #6c63ff, #4f46e5)'), opacity: invalid.length ? 0.5 : 1 }}>
             {saving ? 'Saving…' : 'Save'}
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─── Generate: trending or normal ──────────────────────────────────────────────
+function GenerateModal({ ch, kids, onClose, onPick }) {
+  const opt = (trending, icon, title, text) => (
+    <button onClick={() => onPick(trending)} style={{
+      textAlign: 'left', background: trending ? '#fff7ed' : '#f8fafc', border: `2px solid ${trending ? '#fdba74' : '#e2e8f0'}`,
+      borderRadius: 14, padding: '16px 18px', cursor: 'pointer', width: '100%', fontFamily: 'inherit',
+    }}>
+      <div style={{ fontSize: 16, fontWeight: 800, color: '#1a1a2e' }}>{icon} {title}</div>
+      <div style={{ fontSize: 13, color: '#555', marginTop: 6, lineHeight: 1.5 }}>{text}</div>
+    </button>
+  );
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+      onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 520, padding: 24, boxShadow: '0 25px 60px rgba(0,0,0,0.3)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+          <h2 style={{ margin: 0, fontSize: 19, color: '#1a1a2e' }}>{ch.icon} {kids ? 'New story' : 'New video'}</h2>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: '#888' }}>×</button>
+        </div>
+        <div style={{ display: 'grid', gap: 12 }}>
+          {opt(true, '📈', 'Use what’s trending',
+            kids ? 'Checks which Hindi kids’ stories are rising on YouTube this fortnight and upcoming festivals or special days, then builds the story around that.'
+                 : 'Checks fast-rising videos in your niche from the last 14 days and this week’s money news, then builds the video around a rising topic with sourced facts.')}
+          {opt(false, '🌿', 'Normal',
+            kids ? 'A classic Panchatantra-style tale (or your “next story idea” from Settings). Evergreen: keeps getting found for years.'
+                 : 'An evergreen topic picked the usual way. Keeps getting found for years.')}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TrendNote({ trend, compact }) {
+  if (!trend || !trend.why) return null;
+  return (
+    <div style={{ marginTop: compact ? 10 : 16, background: '#fff7ed', border: '1px solid #fed7aa', color: '#9a3412', borderRadius: 10, padding: '8px 12px', fontSize: 13, lineHeight: 1.5 }}>
+      <strong>📈 Trending pick:</strong> {trend.why}
+      {!compact && trend.sources && trend.sources.length > 0 && (
+        <div style={{ marginTop: 6 }}>
+          {trend.sources.map((s, i) => <div key={i}>↗ <a href={s.url} target="_blank" rel="noreferrer" style={{ color: '#c2410c' }}>{s.title || s.url}</a></div>)}
+        </div>
+      )}
+      {!compact && trend.rising && trend.rising.length > 0 && (
+        <div style={{ marginTop: 6, color: '#7c2d12' }}>
+          Rising on YouTube: {trend.rising.slice(0, 3).map(r => `“${r.title}” (${r.perDay.toLocaleString()} views/day)`).join(' · ')}
+        </div>
+      )}
     </div>
   );
 }
@@ -513,6 +577,7 @@ export default function App() {
   const [filter, setFilter] = useState('all');
   const [apiError, setApiError] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [showGenerate, setShowGenerate] = useState(false);
   const [toast, setToast] = useState(() => (window.location.search.includes('youtube=connected') ? '✅ YouTube channel connected' : null));
 
   const api = useCallback((p) => `${API}${p}${p.includes('?') ? '&' : '?'}channel=${channel}`, [channel]);
@@ -583,10 +648,11 @@ export default function App() {
     await fetchData();
   }
 
-  async function triggerPipeline() {
+  async function triggerPipeline(trending) {
+    setShowGenerate(false);
     setStarting(true);
     setFilter('all');
-    await post('/pipeline/run');
+    await post('/pipeline/run', { trending });
     setStarting(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -638,7 +704,7 @@ export default function App() {
           background: 'rgba(255,255,255,0.1)', color: '#fff', border: '1px solid rgba(255,255,255,0.2)',
           borderRadius: 10, padding: '10px 14px', fontSize: 14, fontWeight: 600, cursor: 'pointer',
         }}>⚙️ Settings</button>
-        <button onClick={triggerPipeline} disabled={starting || generatingNow} style={{
+        <button onClick={() => setShowGenerate(true)} disabled={starting || generatingNow} style={{
           background: starting || generatingNow ? '#4b5563' : `linear-gradient(135deg, ${ch.accent}, ${ch.accent2})`,
           color: '#fff', border: 'none', borderRadius: 10, padding: '10px 20px', fontSize: 14, fontWeight: 700,
           cursor: starting || generatingNow ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', gap: 8,
@@ -702,6 +768,10 @@ export default function App() {
       {showSettings && health?.settings && health.channel === channel && (channel === 'kids'
         ? <KidsSettingsModal settings={health.settings} onClose={() => setShowSettings(false)} onSave={saveSettings} />
         : <SettingsModal settings={health.settings} onClose={() => setShowSettings(false)} onSave={saveSettings} />
+      )}
+
+      {showGenerate && (
+        <GenerateModal ch={ch} kids={channel === 'kids'} onClose={() => setShowGenerate(false)} onPick={triggerPipeline} />
       )}
 
       {selectedVideo && (

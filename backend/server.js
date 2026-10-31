@@ -10,6 +10,7 @@ const db = require('./db');
 const jobstate = require('./jobstate');
 const yt = require('./youtube');
 const storyWriter = require('./render/story/writer');
+const trends = require('./trends');
 
 const STORY_MODEL = process.env.STORY_MODEL || 'claude-sonnet-4-6';
 const CHANNEL_LABEL = { finance: 'WealthSutra', kids: 'Kahani Pitara' };
@@ -88,6 +89,9 @@ function linkRules(links) {
 }
 
 async function writeScript(topic, niche, audience, links = []) {
+  const facts = (topic.facts || []).length
+    ? `\nCurrent, sourced facts for this topical video (use them accurately; don't invent other current figures):\n${topic.facts.map(f => `- ${f}`).join('\n')}\n`
+    : '';
   const scriptMsg = await anthropic.messages.create({
     model: 'claude-haiku-4-5',
     max_tokens: 4000,
@@ -98,7 +102,7 @@ async function writeScript(topic, niche, audience, links = []) {
 Write a complete, engaging voiceover script for this video:
 Title: ${topic.title}
 Hook concept: ${topic.hook}
-
+${facts}
 Requirements:
 - 1150-1350 words of narration (8-10 minutes at 135 words/minute)
 - Conversational, no jargon, like explaining to a friend; short punchy sentences
@@ -150,7 +154,7 @@ function sectionsFromScript(scriptText) {
 }
 
 // ─── Phase 1: generate topic + script (runs on this server) ──────────────────
-async function runPipeline(channel = 'finance', existingJobId = null) {
+async function runPipeline(channel = 'finance', existingJobId = null, { trending } = {}) {
   const store = db.of(channel);
   const data = store.get();
   const { niche, audience } = data.settings;
@@ -164,6 +168,7 @@ async function runPipeline(channel = 'finance', existingJobId = null) {
         createdAt: new Date().toISOString(),
         title: channel === 'kids' ? 'New story — choosing a tale…' : 'New video — researching topic…',
         kind: channel === 'kids' ? 'story' : undefined,
+        trending: !!trending,
         topic: null,
         script: null,
       });
@@ -172,13 +177,13 @@ async function runPipeline(channel = 'finance', existingJobId = null) {
   } else {
     await store.update(d => {
       const v = d.videos.find(x => x.id === jobId);
-      if (v) { v.status = 'generating'; v.error = null; }
+      if (v) { v.status = 'generating'; v.error = null; trending = trending === undefined ? !!v.trending : trending; v.trending = !!trending; }
     });
   }
 
   const r = jobstate.createReporter(jobId, 'generate');
   if (channel === 'kids') {
-    generateStory(store, jobId, r).catch(async (err) => {
+    generateStory(store, jobId, r, { trending }).catch(async (err) => {
       console.error('[Story] ❌', err.message);
       await r.fail(err);
       await store.update(d => { const v = d.videos.find(x => x.id === jobId); if (v) { v.status = 'error'; v.error = err.message; } });
@@ -188,11 +193,25 @@ async function runPipeline(channel = 'finance', existingJobId = null) {
   const db_ = store;   // finance pipeline below writes to its own store
   (async () => {
     try {
-      await r.stage('researching', `Finding a fresh ${niche} topic`);
       const pastTitles = data.videos.filter(v => v.id !== jobId && v.topic).map(v => v.title);
-      const topic = await researchTopic(niche, audience, pastTitles);
+      let topic = null, trend = null;
+      if (trending) {
+        await r.stage('researching', 'Checking what’s trending in your niche this week');
+        try {
+          ({ topic, trend } = await trends.trendingFinanceTopic({
+            anthropic, youtube: await yt.getYouTubeClient(channel).catch(() => null), niche, audience, pastTitles, log: m => r.log(m),
+          }));
+          r.log(`📈 Trending pick: ${trend.why}`);
+        } catch (e) {
+          r.log(`⚠️ Trend research failed (${e.message.slice(0, 120)}) — using the normal topic search`);
+        }
+      }
+      if (!topic) {
+        await r.stage('researching', `Finding a fresh ${niche} topic`);
+        topic = await researchTopic(niche, audience, pastTitles);
+      }
       r.log(`Topic: “${topic.title}”`);
-      await db_.update(d => { const v = d.videos.find(x => x.id === jobId); if (v) { v.title = topic.title; v.topic = topic; } });
+      await db_.update(d => { const v = d.videos.find(x => x.id === jobId); if (v) { v.title = topic.title; v.topic = topic; v.trend = trend; } });
 
       await r.stage('writing', 'Claude is drafting ~1,300 words');
       const links = validLinks(data.settings);
@@ -235,13 +254,27 @@ async function runPipeline(channel = 'finance', existingJobId = null) {
 }
 
 // Kids channel: Claude writes a complete Hindi story (cast, scenes, dialogue, actions)
-async function generateStory(store, jobId, r) {
+async function generateStory(store, jobId, r, { trending } = {}) {
   const data = store.get();
-  await r.stage('researching', 'Choosing a story kids will love');
   const pastTitles = data.videos.filter(v => v.id !== jobId && v.story).map(v => v.title);
-  if (data.settings.storyHint) r.log(`Story idea from settings: ${data.settings.storyHint}`);
+  let storyHint = data.settings.storyHint || '', trend = null;
+  if (trending) {
+    await r.stage('researching', 'Checking trending kids’ stories and upcoming occasions');
+    try {
+      const youtube = (await yt.getYouTubeClient('kids').catch(() => null)) || (await yt.getYouTubeClient('finance').catch(() => null));
+      const res = await trends.trendingStoryIdea({ anthropic, youtube, pastTitles, species: storyWriter.SPECIES, log: m => r.log(m) });
+      trend = res.trend;
+      storyHint = res.storyHint + (storyHint ? ` (Also consider: ${storyHint})` : '');
+      r.log(`📈 Trending pick: ${trend.why}`);
+    } catch (e) {
+      r.log(`⚠️ Trend research failed (${e.message.slice(0, 120)}) — picking a story the normal way`);
+    }
+  } else {
+    await r.stage('researching', 'Choosing a story kids will love');
+  }
+  if (storyHint && !trend) r.log(`Story idea from settings: ${storyHint}`);
   await r.stage('writing', 'Claude is writing the story, characters and dialogue');
-  const story = await storyWriter.writeStory({ anthropic, model: STORY_MODEL, pastTitles, storyHint: data.settings.storyHint || '' });
+  const story = await storyWriter.writeStory({ anthropic, model: STORY_MODEL, pastTitles, storyHint });
   const beats = story.scenes.reduce((a, sc) => a + sc.beats.length, 0);
   r.log(`Story: “${story.title}” — ${story.cast.map(c => c.name).join(', ')} · ${story.scenes.length} scenes, ${beats} lines`);
 
@@ -253,6 +286,7 @@ async function generateStory(store, jobId, r) {
     if (!v) return;
     v.status = 'pending_approval';
     v.kind = 'story';
+    v.trend = trend;
     v.title = story.title;
     v.story = story;
     v.script = {
@@ -447,7 +481,7 @@ app.delete('/videos/:id', async (req, res) => {
 });
 
 app.post('/pipeline/run', async (req, res) => {
-  const jobId = await runPipeline(chOf(req));
+  const jobId = await runPipeline(chOf(req), null, { trending: !!(req.body && req.body.trending) });
   res.json({ success: true, jobId });
 });
 
@@ -500,8 +534,8 @@ app.get('/channel/stats', async (req, res) => {
 app.get('/settings', (req, res) => res.json(db.of(chOf(req)).get().settings));
 
 const SETTINGS_KEYS = {
-  finance: ['niche', 'audience', 'frequencyDays', 'publishHour', 'isRunning', 'affiliateLinks'],
-  kids: ['channelName', 'storyHint', 'frequencyDays', 'publishHour', 'isRunning'],
+  finance: ['niche', 'audience', 'frequencyDays', 'publishHour', 'isRunning', 'affiliateLinks', 'scheduledTrending'],
+  kids: ['channelName', 'storyHint', 'frequencyDays', 'publishHour', 'isRunning', 'scheduledTrending'],
 };
 
 app.patch('/settings', async (req, res) => {
@@ -513,6 +547,7 @@ app.patch('/settings', async (req, res) => {
   if ('channelName' in patch) patch.channelName = String(patch.channelName || '').trim().slice(0, 40) || 'कहानी पिटारा';
   if ('frequencyDays' in patch) patch.frequencyDays = Math.min(30, Math.max(1, parseInt(patch.frequencyDays, 10) || 2));
   if ('isRunning' in patch) patch.isRunning = !!patch.isRunning;
+  if ('scheduledTrending' in patch) patch.scheduledTrending = !!patch.scheduledTrending;
   if ('affiliateLinks' in patch) {
     patch.affiliateLinks = (Array.isArray(patch.affiliateLinks) ? patch.affiliateLinks : [])
       .map(l => ({ name: String(l.name || '').trim().slice(0, 60), url: String(l.url || '').trim().slice(0, 500) }))
@@ -534,7 +569,7 @@ cron.schedule('0 6 * * *', async () => {
     const nextRun = data.nextGenerateAt ? new Date(data.nextGenerateAt) : null;
     if (!nextRun || new Date() >= nextRun) {
       console.log(`[Cron:${channel}] Time to generate a new video!`);
-      await runPipeline(channel);
+      await runPipeline(channel, null, { trending: !!data.settings.scheduledTrending });
     }
   }
 });

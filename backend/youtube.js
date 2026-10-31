@@ -242,6 +242,12 @@ async function ensurePlaylist(youtube, { title, description }, lang) {
   return created.data.id;
 }
 
+// Read-only API client for a channel's login (null if not connected)
+async function getYouTubeClient(channel) {
+  if (!(await loadTokens(channel))) return null;
+  return google.youtube({ version: 'v3', auth: await getAuthenticatedClient(channel) });
+}
+
 async function getChannelInfo(channelId) {
   const auth = await getAuthenticatedClient(channelId);
   const youtube = google.youtube({ version: 'v3', auth });
@@ -260,5 +266,5 @@ async function getChannelInfo(channelId) {
 
 module.exports = {
   getAuthUrl, exchangeCodeForTokens, uploadVideo,
-  isYouTubeConnected, getChannelInfo, clearTokens, missingScopes, buildDescription,
+  isYouTubeConnected, getChannelInfo, clearTokens, missingScopes, buildDescription, getYouTubeClient,
 };
