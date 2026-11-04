@@ -30,6 +30,22 @@ const CHANNELS = {
       isRunning: true,
     }),
   },
+  motivation: {
+    key: 'autotube:motivation:data', file: 'data-motivation.json',
+    defaults: () => ({
+      channelName: process.env.MOTIVATION_CHANNEL_NAME || 'Apna Motivation',
+      person: 'Chanakya',
+      topicHint: '',
+      frequencyDays: 2,
+      publishHour: 18,
+      isRunning: true,
+      scheduledTrending: false,
+      autoApprove: false,
+      shortsPerVideo: 2,
+      shortsGapHours: 24,
+      usedRefs: {},
+    }),
+  },
 };
 const CHANNEL_IDS = Object.keys(CHANNELS);
 

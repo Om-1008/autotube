@@ -13,6 +13,10 @@ const CHANNELS = {
     id: 'kids', name: 'Kahani Pitara', icon: '📚', unit: 'story', accent: '#e91e63', accent2: '#c2185b',
     header: 'linear-gradient(135deg, #4a1942 0%, #6b2154 100%)', sub: '#f8bbd0',
   },
+  motivation: {
+    id: 'motivation', name: 'Apna Motivation', icon: '🔥', unit: 'video', accent: '#d97706', accent2: '#b45309',
+    header: 'linear-gradient(135deg, #2a1640 0%, #5b2a1a 100%)', sub: '#fcd34d',
+  },
 };
 function initialChannel() {
   const q = new URLSearchParams(window.location.search).get('channel');
@@ -374,10 +378,23 @@ function VideoCard({ video, onOpenScript, onRetry, onDelete, ch }) {
         </div>
       )}
 
+      {video.shorts && video.shorts.length > 0 && (
+        <div style={{ marginTop: 12, display: 'grid', gap: 6 }}>
+          {video.shorts.map((sh, i) => (
+            <div key={sh.youtubeId || i} style={{ fontSize: 13, color: '#555', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <span style={{ background: '#fef3c7', color: '#92400e', borderRadius: 12, padding: '2px 9px', fontWeight: 700, fontSize: 12 }}>Short {i + 1}</span>
+              <span>{new Date(sh.publishAt) > new Date() ? '📅 goes live ' : '✅ live since '}{new Date(sh.publishAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</span>
+              {sh.youtubeUrl && <a href={sh.youtubeUrl} target="_blank" rel="noreferrer" style={{ color: '#d97706', fontWeight: 700 }}>Open ↗</a>}
+            </div>
+          ))}
+        </div>
+      )}
+
       {showProgress && <ProgressPanel video={video} />}
 
       <div style={{ marginTop: 14, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
         {video.wordCount > 0 && <button onClick={() => onOpenScript(video.id)} style={btn('#f0efff', ch.accent)}>{isStory ? '📖 Read Story' : '📄 Read Script'}</button>}
+        {video.person && <span style={{ alignSelf: 'center', fontSize: 12, color: '#92400e', background: '#fffbeb', borderRadius: 12, padding: '3px 10px' }}>🧘 {video.person}</span>}
         {video.status === 'pending_approval' && (
           <button onClick={() => onOpenScript(video.id)} style={btn('linear-gradient(135deg, #10b981, #059669)')}>✅ Review & Approve</button>
         )}
@@ -442,6 +459,63 @@ function KidsSettingsModal({ settings, onClose, onSave }) {
           <button disabled={saving} onClick={async () => {
             setSaving(true); await onSave({ channelName: name, storyHint: hint, frequencyDays: days, isRunning: running, scheduledTrending: schedTrend }); setSaving(false); onClose();
           }} style={btn('linear-gradient(135deg, #e91e63, #c2185b)')}>{saving ? 'Saving…' : 'Save'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MotivationSettingsModal({ settings, onClose, onSave }) {
+  const [person, setPerson] = useState(settings.person || 'Chanakya');
+  const [hint, setHint] = useState(settings.topicHint || '');
+  const [days, setDays] = useState(settings.frequencyDays || 2);
+  const [running, setRunning] = useState(settings.isRunning !== false);
+  const [auto, setAuto] = useState(!!settings.autoApprove);
+  const [schedTrend, setSchedTrend] = useState(!!settings.scheduledTrending);
+  const [nShorts, setNShorts] = useState(settings.shortsPerVideo ?? 2);
+  const [gap, setGap] = useState(settings.shortsGapHours || 24);
+  const [saving, setSaving] = useState(false);
+  const used = (settings.usedRefs && settings.usedRefs[person]) || [];
+  const label = { fontSize: 14, margin: '16px 0 4px', color: '#1a1a2e', display: 'block', fontWeight: 700 };
+  const input = { width: '100%', borderRadius: 10, border: '1px solid #ddd', padding: 10, fontSize: 14, fontFamily: 'inherit', boxSizing: 'border-box' };
+  const check = { display: 'flex', gap: 8, alignItems: 'center', fontSize: 14, marginTop: 10, cursor: 'pointer' };
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+      onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 560, padding: 24, boxShadow: '0 25px 60px rgba(0,0,0,0.3)', maxHeight: '92vh', overflowY: 'auto' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h2 style={{ margin: 0, fontSize: 19, color: '#1a1a2e' }}>⚙️ Apna Motivation settings</h2>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: '#888' }}>×</button>
+        </div>
+        <label style={label}>Whose thoughts</label>
+        <input value={person} onChange={e => setPerson(e.target.value)} style={input} placeholder="Chanakya, APJ Abdul Kalam, Swami Vivekananda…" />
+        <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>
+          {used.length ? `${used.length} teachings of ${person} already used — new videos pick unused ones.` : 'No teachings used yet for this person.'} Chanakya appears as himself; anyone else is presented by the channel's mentor character.
+        </div>
+        <label style={label}>Topic idea for the next video <span style={{ fontWeight: 400, color: '#888' }}>(optional)</span></label>
+        <input value={hint} onChange={e => setHint(e.target.value)} style={input} placeholder="e.g. discipline for exam preparation" />
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+          <div>
+            <label style={label}>New video every</label>
+            <select value={days} onChange={e => setDays(+e.target.value)} style={{ ...input, width: 140 }}>{[1, 2, 3, 4, 7].map(d => <option key={d} value={d}>{d === 1 ? 'day' : `${d} days`}</option>)}</select>
+          </div>
+          <div>
+            <label style={label}>Shorts per video</label>
+            <select value={nShorts} onChange={e => setNShorts(+e.target.value)} style={{ ...input, width: 120 }}>{[0, 1, 2, 3].map(d => <option key={d} value={d}>{d}</option>)}</select>
+          </div>
+          <div>
+            <label style={label}>Release Shorts every</label>
+            <select value={gap} onChange={e => setGap(+e.target.value)} style={{ ...input, width: 150 }}>{[6, 12, 24, 48].map(h => <option key={h} value={h}>{h < 24 ? `${h} hours` : h === 24 ? 'day' : '2 days'}</option>)}</select>
+          </div>
+        </div>
+        <label style={check}><input type="checkbox" checked={running} onChange={e => setRunning(e.target.checked)} /> Write videos automatically on the schedule</label>
+        <label style={check}><input type="checkbox" checked={schedTrend} onChange={e => setSchedTrend(e.target.checked)} /> 📈 Scheduled videos use trending angles</label>
+        <label style={check}><input type="checkbox" checked={auto} onChange={e => setAuto(e.target.checked)} /> ⚡ Auto-approve: render &amp; upload without waiting for my review</label>
+        <div style={{ display: 'flex', gap: 10, marginTop: 20, justifyContent: 'flex-end' }}>
+          <button onClick={onClose} style={btn('#f3f4f6', '#555')}>Cancel</button>
+          <button disabled={saving} onClick={async () => {
+            setSaving(true); await onSave({ person, topicHint: hint, frequencyDays: days, isRunning: running, autoApprove: auto, scheduledTrending: schedTrend, shortsPerVideo: nShorts, shortsGapHours: gap }); setSaving(false); onClose();
+          }} style={btn('linear-gradient(135deg, #d97706, #b45309)')}>{saving ? 'Saving…' : 'Save'}</button>
         </div>
       </div>
     </div>
@@ -519,10 +593,10 @@ function GenerateModal({ ch, kids, onClose, onPick }) {
         </div>
         <div style={{ display: 'grid', gap: 12 }}>
           {opt(true, '📈', 'Use what’s trending',
-            kids ? 'Checks which Hindi kids’ stories are rising on YouTube this fortnight and upcoming festivals or special days, then builds the story around that.'
+            ch.id === 'motivation' ? 'Checks rising Hindi motivation videos and what young Indians are going through right now (exams, placements, festivals), then picks matching genuine teachings.' : kids ? 'Checks which Hindi kids’ stories are rising on YouTube this fortnight and upcoming festivals or special days, then builds the story around that.'
                  : 'Checks fast-rising videos in your niche from the last 14 days and this week’s money news, then builds the video around a rising topic with sourced facts.')}
-          {opt(false, '🌿', 'Normal',
-            kids ? 'A classic Panchatantra-style tale (or your “next story idea” from Settings). Evergreen: keeps getting found for years.'
+          {opt(false, '🌿', ch.id === 'motivation' ? 'Regular' : 'Normal',
+            ch.id === 'motivation' ? 'The next unused genuine teachings of the person set in Settings (Chanakya by default), 3 lessons + Shorts.' : kids ? 'A classic Panchatantra-style tale (or your “next story idea” from Settings). Evergreen: keeps getting found for years.'
                  : 'An evergreen topic picked the usual way. Keeps getting found for years.')}
         </div>
       </div>
@@ -689,7 +763,7 @@ export default function App() {
             )}
           </h1>
           <p style={{ margin: '4px 0 0', color: '#8899bb', fontSize: 13 }}>
-            {channel === 'kids' ? 'Hindi kids stories' : (health?.settings?.niche ? health.settings.niche.replace(/\b\w/g, c => c.toUpperCase()) : 'Personal Finance')}
+            {channel === 'kids' ? 'Hindi kids stories' : channel === 'motivation' ? `Thoughts of ${health?.settings?.person || 'Chanakya'}` : (health?.settings?.niche ? health.settings.niche.replace(/\b\w/g, c => c.toUpperCase()) : 'Personal Finance')}
             {' · '}{health?.settings?.isRunning === false ? 'Auto-generate paused' : <>Next {ch.unit}: <strong style={{ color: ch.sub }}>{nextRun}</strong></>}
             {' · '}{yt?.connected
               ? <>
@@ -767,6 +841,8 @@ export default function App() {
 
       {showSettings && health?.settings && health.channel === channel && (channel === 'kids'
         ? <KidsSettingsModal settings={health.settings} onClose={() => setShowSettings(false)} onSave={saveSettings} />
+        : channel === 'motivation'
+        ? <MotivationSettingsModal settings={health.settings} onClose={() => setShowSettings(false)} onSave={saveSettings} />
         : <SettingsModal settings={health.settings} onClose={() => setShowSettings(false)} onSave={saveSettings} />
       )}
 

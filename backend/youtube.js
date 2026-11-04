@@ -15,7 +15,7 @@ const SCOPES = [
 ];
 
 // One YouTube login per channel (finance keeps its original key)
-const TOKEN_KEYS = { finance: 'autotube:youtube_tokens', kids: 'autotube:kids:youtube_tokens' };
+const TOKEN_KEYS = { finance: 'autotube:youtube_tokens', kids: 'autotube:kids:youtube_tokens', motivation: 'autotube:motivation:youtube_tokens' };
 const keyOf = (channel = 'finance') => TOKEN_KEYS[channel] || TOKEN_KEYS.finance;
 
 function getOAuthClient() {
@@ -112,7 +112,9 @@ function buildDescription(scriptData) {
   if (chapters.length >= 3) {
     parts.push('', 'CHAPTERS', ...chapters.map(c => `${fmtTime(c.t)} ${c.title}`));
   }
-  if (scriptData.kids) {
+  if (scriptData.motivation) {
+    parts.push('', '---------------------------------', 'Narration and animation made with AI assistance. Teachings are quoted from their original sources.');
+  } else if (scriptData.kids) {
     if (scriptData.moral) parts.push('', `🌟 सीख: ${scriptData.moral}`);
     parts.push('', 'हिंदी और English subtitles उपलब्ध हैं (CC).');
     parts.push('', '---------------------------------', 'Animated with AI assistance (story and voices).');
@@ -131,28 +133,30 @@ function buildDescription(scriptData) {
 }
 
 // Upload a rendered MP4. Does not touch the DB — caller records the result.
-async function uploadVideo(videoPath, scriptData, { onProgress, thumbnailPath, channel, log = () => {} } = {}) {
+async function uploadVideo(videoPath, scriptData, { onProgress, thumbnailPath, channel, publishAt, log = () => {} } = {}) {
   if (!process.env.YOUTUBE_CLIENT_ID || !process.env.YOUTUBE_CLIENT_SECRET) {
     throw new Error('YouTube OAuth credentials not set (YOUTUBE_CLIENT_ID / YOUTUBE_CLIENT_SECRET)');
   }
-  const auth = await getAuthenticatedClient(channel || (scriptData.kids ? 'kids' : 'finance'));
+  const auth = await getAuthenticatedClient(channel || (scriptData.kids ? 'kids' : scriptData.motivation ? 'motivation' : 'finance'));
   const youtube = google.youtube({ version: 'v3', auth });
   const fileSize = fs.statSync(videoPath).size;
-  const kids = !!scriptData.kids;
-  const lang = kids ? 'hi' : 'en';
+  const kids = !!scriptData.kids, motiv = !!scriptData.motivation;
+  const lang = kids || motiv ? 'hi' : 'en';
 
   // Tags: ours first, then the relevant tags of the top-viewed recent videos on this topic
   let researched = [];
-  try {
+  if (!scriptData.skipTagResearch) try {
     researched = await seo.researchTags(youtube, {
       queries: scriptData.searchQueries && scriptData.searchQueries.length ? scriptData.searchQueries : [scriptData.title],
-      lang, region: kids ? 'IN' : undefined, context: scriptData.seoContext || scriptData.title, log,
+      lang, region: kids || motiv ? 'IN' : undefined, context: scriptData.seoContext || scriptData.title, log,
     });
     if (researched.length) log(`Added ${researched.length} tags used by top videos: ${researched.slice(0, 8).join(', ')}${researched.length > 8 ? '…' : ''}`);
   } catch (e) {
     log(`Tag research skipped (${e.message.slice(0, 120)})`);
   }
-  const defaults = kids
+  const defaults = motiv
+    ? ['motivation', 'hindi motivation', 'motivational video', 'life lessons', 'success tips', 'chanakya niti', 'motivation for students']
+    : kids
     ? ['hindi kahani', 'hindi kahaniya', 'bachon ki kahani', 'panchatantra ki kahaniyan', 'moral stories in hindi', 'हिंदी कहानियाँ', 'kids stories in hindi', 'cartoon kahani']
     : ['personal finance', 'money tips', 'investing for beginners', 'financial freedom', 'how to save money', String(new Date().getFullYear())];
   const tags = seo.mergeTags(scriptData.tags || [], researched, defaults);
@@ -165,11 +169,13 @@ async function uploadVideo(videoPath, scriptData, { onProgress, thumbnailPath, c
         description: buildDescription(scriptData),
         tags,
         categoryId: kids ? '1' : '27',
-        defaultLanguage: kids ? 'hi' : 'en',
-        defaultAudioLanguage: kids ? 'hi' : 'en',
+        defaultLanguage: lang,
+        defaultAudioLanguage: lang,
       },
       status: {
-        privacyStatus: process.env.YOUTUBE_PRIVACY || 'public',
+        // scheduled release (Shorts): upload private with publishAt, YouTube makes it public then
+        privacyStatus: publishAt ? 'private' : (process.env.YOUTUBE_PRIVACY || 'public'),
+        ...(publishAt ? { publishAt } : {}),
         // Children's content must be declared "made for kids" (COPPA)
         selfDeclaredMadeForKids: kids,
         // YouTube's "Altered or synthetic content" label. Required for realistic AI depictions of

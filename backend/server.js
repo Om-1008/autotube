@@ -13,7 +13,9 @@ const storyWriter = require('./render/story/writer');
 const trends = require('./trends');
 
 const STORY_MODEL = process.env.STORY_MODEL || 'claude-sonnet-4-6';
-const CHANNEL_LABEL = { finance: 'WealthSutra', kids: 'Kahani Pitara' };
+const CHANNEL_LABEL = { finance: 'WealthSutra', kids: 'Kahani Pitara', motivation: 'Apna Motivation' };
+const motivationWriter = require('./render/motivation/writer');
+const MOTIVATION_MODEL = process.env.MOTIVATION_MODEL || 'claude-sonnet-4-6';
 const chOf = (req) => (db.CHANNEL_IDS.includes(req.query.channel) ? req.query.channel : 'finance');
 
 const DASHBOARD_URL = process.env.DASHBOARD_URL || 'https://autotube-zeta.vercel.app';
@@ -166,8 +168,8 @@ async function runPipeline(channel = 'finance', existingJobId = null, { trending
         id: jobId,
         status: 'generating',
         createdAt: new Date().toISOString(),
-        title: channel === 'kids' ? 'New story — choosing a tale…' : 'New video — researching topic…',
-        kind: channel === 'kids' ? 'story' : undefined,
+        title: channel === 'kids' ? 'New story — choosing a tale…' : channel === 'motivation' ? 'New video — choosing teachings…' : 'New video — researching topic…',
+        kind: channel === 'kids' ? 'story' : channel === 'motivation' ? 'motivation' : undefined,
         trending: !!trending,
         topic: null,
         script: null,
@@ -182,6 +184,14 @@ async function runPipeline(channel = 'finance', existingJobId = null, { trending
   }
 
   const r = jobstate.createReporter(jobId, 'generate');
+  if (channel === 'motivation') {
+    generateMotivation(store, jobId, r, { trending }).catch(async (err) => {
+      console.error('[Motivation] ❌', err.message);
+      await r.fail(err);
+      await store.update(d => { const v = d.videos.find(x => x.id === jobId); if (v) { v.status = 'error'; v.error = err.message; } });
+    });
+    return jobId;
+  }
   if (channel === 'kids') {
     generateStory(store, jobId, r, { trending }).catch(async (err) => {
       console.error('[Story] ❌', err.message);
@@ -251,6 +261,65 @@ async function runPipeline(channel = 'finance', existingJobId = null, { trending
   })();
 
   return jobId;
+}
+
+// Apna Motivation: genuine teachings of the chosen person → long video + Shorts scripts
+async function generateMotivation(store, jobId, r, { trending } = {}) {
+  const data = store.get();
+  const st = data.settings;
+  const person = (st.person || 'Chanakya').trim();
+  const usedRefs = (st.usedRefs && st.usedRefs[person]) || [];
+  let trend = null, trendText = '';
+  if (trending) {
+    await r.stage('researching', `Checking what's trending for motivation content`);
+    try {
+      const youtube = await yt.getYouTubeClient('motivation').catch(() => null);
+      const res = await trends.trendingMotivation({ anthropic, youtube, person, log: m => r.log(m) });
+      trend = res.trend; trendText = res.angle;
+      r.log(`📈 Trending angle: ${trend.why}`);
+    } catch (e) {
+      r.log(`⚠️ Trend research failed (${e.message.slice(0, 120)}) — using the regular flow`);
+    }
+  } else {
+    await r.stage('researching', `Picking ${person}'s teachings (${usedRefs.length} used so far)`);
+  }
+  await r.stage('writing', `Claude is writing the video + ${st.shortsPerVideo || 2} Shorts and checking sources`);
+  let v;
+  try {
+    v = await motivationWriter.writeMotivation({ anthropic, model: MOTIVATION_MODEL, person, usedRefs, lessons: 3, shorts: Math.max(0, Math.min(3, st.shortsPerVideo ?? 2)), hint: st.topicHint || '', trend: trendText, log: m => r.log(m) });
+  } catch (e) {
+    if (e.exhausted) throw new Error(`No new genuine teachings of ${person} left. Change "Whose thoughts" in Settings (e.g. APJ Abdul Kalam).`);
+    throw e;
+  }
+  r.log(`Video: “${v.title}” — ${v.lessons.length} lessons, ${v.shorts.length} Shorts`);
+  await r.stage('finalizing', 'Preparing it for your review');
+  const script = motivationWriter.toReviewText(v, person);
+  const wordCount = script.split(/\s+/).filter(Boolean).length;
+  await store.update(d => {
+    const x = d.videos.find(y => y.id === jobId);
+    if (!x) return;
+    x.status = 'pending_approval';
+    x.kind = 'motivation'; x.person = person; x.trend = trend; x.title = v.title; x.motivation = v;
+    x.script = { title: v.title, duration: '~5 min + Shorts', wordCount, script,
+      sections: v.lessons.map((l, i) => ({ name: `Lesson ${i + 1}: ${l.ref}` })).concat(v.shorts.map((s, i) => ({ name: `Short ${i + 1}` }))),
+      thumbnailIdeas: [v.thumbnailText], description: v.description, tags: v.tags };
+    d.settings.usedRefs = d.settings.usedRefs || {};
+    d.settings.usedRefs[person] = [...(d.settings.usedRefs[person] || []), ...v.lessons.map(l => l.ref)];
+  });
+  await r.done('pending_approval');
+  if (st.autoApprove) {
+    r.log('Auto-approve is on — starting the render');
+    await startRender('motivation', jobId);
+    return;
+  }
+  r.log('Ready for your review');
+  await sendEmail({
+    to: process.env.NOTIFY_EMAIL,
+    subject: `🔥 Apna Motivation video ready for approval: "${v.title}"`,
+    html: `<div style="font-family:sans-serif;max-width:600px;margin:auto"><h2>🔥 Apna Motivation — ready for review</h2>
+      <p><strong>${v.title}</strong><br>${v.lessons.map(l => l.ref).join(' · ')}</p>
+      <p><a href="${DASHBOARD_URL}?channel=motivation" style="background:#f59e0b;color:#1a1030;padding:12px 24px;border-radius:8px;text-decoration:none">Review &amp; approve</a></p></div>`,
+  });
 }
 
 // Kids channel: Claude writes a complete Hindi story (cast, scenes, dialogue, actions)
@@ -388,6 +457,7 @@ function merge(video, st, { fullLog = false } = {}) {
       youtubeId: st.youtubeId || video.youtubeId,
       youtubeUrl: st.youtubeUrl || video.youtubeUrl,
       uploadedAt: st.uploadedAt || video.uploadedAt,
+      shorts: st.shorts || video.shorts,
       startedAt: st.startedAt,
       updatedAt: st.updatedAt,
     });
@@ -422,7 +492,7 @@ app.get('/health', (req, res) => {
 });
 
 app.get('/videos', async (req, res) => {
-  const list = (await mergedVideos(chOf(req))).map(({ script, story, ...rest }) => ({
+  const list = (await mergedVideos(chOf(req))).map(({ script, story, motivation, ...rest }) => ({
     ...rest,
     scriptPreview: script?.script ? script.script.slice(0, 300) + '…' : null,
     wordCount: script?.wordCount,
@@ -536,6 +606,7 @@ app.get('/settings', (req, res) => res.json(db.of(chOf(req)).get().settings));
 const SETTINGS_KEYS = {
   finance: ['niche', 'audience', 'frequencyDays', 'publishHour', 'isRunning', 'affiliateLinks', 'scheduledTrending'],
   kids: ['channelName', 'storyHint', 'frequencyDays', 'publishHour', 'isRunning', 'scheduledTrending'],
+  motivation: ['channelName', 'person', 'topicHint', 'frequencyDays', 'isRunning', 'scheduledTrending', 'autoApprove', 'shortsPerVideo', 'shortsGapHours'],
 };
 
 app.patch('/settings', async (req, res) => {
@@ -544,10 +615,15 @@ app.patch('/settings', async (req, res) => {
   const patch = {};
   for (const k of SETTINGS_KEYS[channel]) if (k in (req.body || {})) patch[k] = req.body[k];
   if ('storyHint' in patch) patch.storyHint = String(patch.storyHint || '').trim().slice(0, 300);
-  if ('channelName' in patch) patch.channelName = String(patch.channelName || '').trim().slice(0, 40) || 'कहानी पिटारा';
+  if ('channelName' in patch) patch.channelName = String(patch.channelName || '').trim().slice(0, 40) || (channel === 'motivation' ? 'Apna Motivation' : 'कहानी पिटारा');
   if ('frequencyDays' in patch) patch.frequencyDays = Math.min(30, Math.max(1, parseInt(patch.frequencyDays, 10) || 2));
   if ('isRunning' in patch) patch.isRunning = !!patch.isRunning;
   if ('scheduledTrending' in patch) patch.scheduledTrending = !!patch.scheduledTrending;
+  if ('autoApprove' in patch) patch.autoApprove = !!patch.autoApprove;
+  if ('person' in patch) patch.person = String(patch.person || '').trim().slice(0, 60) || 'Chanakya';
+  if ('topicHint' in patch) patch.topicHint = String(patch.topicHint || '').trim().slice(0, 300);
+  if ('shortsPerVideo' in patch) patch.shortsPerVideo = Math.min(3, Math.max(0, parseInt(patch.shortsPerVideo, 10) || 0));
+  if ('shortsGapHours' in patch) patch.shortsGapHours = Math.min(168, Math.max(1, parseInt(patch.shortsGapHours, 10) || 24));
   if ('affiliateLinks' in patch) {
     patch.affiliateLinks = (Array.isArray(patch.affiliateLinks) ? patch.affiliateLinks : [])
       .map(l => ({ name: String(l.name || '').trim().slice(0, 60), url: String(l.url || '').trim().slice(0, 500) }))

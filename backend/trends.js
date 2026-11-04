@@ -111,4 +111,23 @@ Respond with ONLY JSON:
   };
 }
 
-module.exports = { trendingFinanceTopic, trendingStoryIdea, youtubeRising };
+// ── Apna Motivation ──
+async function trendingMotivation({ anthropic, youtube, person, log = () => {} }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const rising = await youtubeRising(youtube, { queries: [`${person} motivation hindi`, 'motivational video hindi students'], lang: 'hi', region: 'IN', log });
+  if (rising.length) log(`Rising motivation videos: ${rising.slice(0, 3).map(r => `“${r.title.slice(0, 45)}” (${fmt(r.perDay)}/day)`).join(' · ')}`);
+  const { data, searches } = await askWithSearch(anthropic, `Today is ${today}. You plan the next Hinglish motivation video on teachings of ${person}, for young Indians (students, job seekers, young professionals).
+
+Fast-rising Hindi motivation videos from the last 14 days (views per day):
+${risingBlock(rising)}
+
+Use web search (1–2 searches) for what young Indians are going through right now: exams/results season, placements, layoffs, festivals, New Year, special days (e.g. Teachers' Day, Youth Day).
+Choose ONE angle that rides a rising theme or occasion and that ${person}'s genuine teachings can speak to. Don't copy any video above.
+
+Respond with ONLY JSON: {"angle": "1–2 sentences in English: the theme the 3 teachings should address and why now", "why": "one sentence: the trend evidence", "sources": [{"title": "...", "url": "https://..."}]}`, 2);
+  log(`Web research: ${searches} search${searches === 1 ? '' : 'es'}`);
+  if (!data.angle) throw new Error('No trending angle returned');
+  return { angle: String(data.angle).slice(0, 400), trend: { why: data.why || '', sources: (data.sources || []).filter(x => x && /^https?:\/\//.test(x.url || '')).slice(0, 5), rising: rising.slice(0, 5) } };
+}
+
+module.exports = { trendingFinanceTopic, trendingStoryIdea, trendingMotivation, youtubeRising };

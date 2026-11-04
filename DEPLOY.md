@@ -34,6 +34,7 @@ The dashboard has one tab per channel. Each has its own history, settings, sched
 |---|---|---|
 | 💰 WealthSutra | `autotube:data`, `autotube:youtube_tokens` | English personal-finance explainers (above) |
 | 📚 Kahani Pitara | `autotube:kids:data`, `autotube:kids:youtube_tokens` | Hindi animated kids' stories |
+| 🔥 Apna Motivation | `autotube:motivation:data`, `autotube:motivation:youtube_tokens` | Hinglish videos on genuine teachings (Chanakya first) + scheduled Shorts |
 
 **Kahani Pitara flow:** Claude (`STORY_MODEL`, default `claude-sonnet-4-6`) writes a Panchatantra-style story as
 structured data (cast of animals, scenes, dialogue, actions, questions for kids, moral) → you approve →
@@ -64,6 +65,18 @@ Scheduled runs use Normal unless Settings → "Scheduled … use trending topics
 - **Playlists:** each upload is added to `Personal Finance Basics | WealthSutra` or
   `पंचतंत्र की कहानियाँ | Panchatantra Stories in Hindi` (created automatically; override with `FINANCE_PLAYLIST` / `KIDS_PLAYLIST`).
 - **Hashtags** at the end of every description; **story titles** like `शेर और चूहा | The Lion and the Mouse Story in Hindi | Panchatantra Kahani`.
+
+## Apna Motivation
+
+Settings → **Whose thoughts** (default Chanakya). Generating: Claude picks 3 unused teachings and verifies them with web search
+(Chanakya Niti verses with Sanskrit text + reference), then writes a Hinglish script (Devanagari for the voice, Roman for captions)
+around their faithful meaning, plus one Short per lesson. Used references are remembered per person; when none are left the job
+says so. Chanakya is drawn as himself; anyone else is presented by the channel's mentor character.
+Render: Kokoro `hm_psi` (`MOTIVATION_VOICE`), tanpura music, `backend/render/motivation/` — 16:9 video + 9:16 Shorts (1440p).
+Upload: the video goes public; Shorts are uploaded private with `publishAt` (every `shortsGapHours`) and link back to the video.
+Optional **Auto-approve** renders and uploads without review.
+YouTube API quota: one video + 2 Shorts ≈ 5,500 of the default 10,000 units/day shared by all three channels — request a quota
+increase in Google Cloud if all three upload on the same day.
 
 ## Setup checklist
 
