@@ -113,7 +113,7 @@ ${linkRules(links)}
 - Before every 2-4 sentences of narration, add a footage cue in this exact form: [B-ROLL: concrete visual description] (e.g. [B-ROLL: woman checking banking app on phone])
 - Write numbers the way they should be spoken on screen ($1,000, 50%)
 - No title line, no timestamps, no speaker labels, no stage directions other than [B-ROLL: ...]
-- End with a strong subscribe/comment call to action
+- End with a warm call to action in 2-3 short sentences, in this order: ask viewers to LIKE the video if it helped, SHARE it with a friend or family member who needs it, and SUBSCRIBE for more (use those exact words: like, share, subscribe). You may also invite a comment with a specific question.
 
 Output ONLY the script.`,
     }],

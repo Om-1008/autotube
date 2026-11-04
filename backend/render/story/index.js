@@ -10,12 +10,12 @@ async function processStoryJob(job, reporter, { workDir, upload = true } = {}) {
   if (!story || !story.scenes) throw new Error('Job has no story');
 
   await reporter.stage('voiceover', `${story.cast.length} characters, ${story.scenes.reduce((a, s) => a + s.beats.length, 0)} lines`);
-  const audio = await buildStoryAudio(story, workDir, reporter);
+  const brand = (job.settings && job.settings.channelName) || process.env.KIDS_CHANNEL_NAME || 'कहानी पिटारा';
+  const audio = await buildStoryAudio(story, workDir, reporter, { brand });
   reporter.log(`Soundtrack ready: ${(audio.total / 60).toFixed(1)} min`);
 
   await reporter.stage('rendering', `Animating ${story.scenes.length} scenes`);
   const H = parseInt(process.env.OUTPUT_HEIGHT_ANIMATED || '1440', 10);
-  const brand = (job.settings && job.settings.channelName) || process.env.KIDS_CHANNEL_NAME || 'कहानी पिटारा';
   const { videoPath, thumbPath } = await renderStory({ story, audio, brand, workDir, reporter, width: Math.round((H * 16) / 9) });
   const sizeMB = +(fs.statSync(videoPath).size / 1048576).toFixed(1);
   const stats = { durationSec: Math.round(audio.total), sizeMB, shots: story.scenes.length, voice: 'kokoro', style: 'story' };

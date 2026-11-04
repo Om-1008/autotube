@@ -575,25 +575,58 @@ const TEMPLATES = {
     };
   },
 
+  // Like → Share → Subscribe: a cursor clicks each button as the narrator says the word
   outro(g, p, T) {
-    const btn = mk('g', {}, g);
-    const bg = mk('rect', { x: -260, y: -64, width: 520, height: 128, rx: 26, fill: '#EF4444' }, btn);
-    const label = txt(btn, 0, 26, 'SUBSCRIBE', { font: 'Anton', size: 74, fill: '#fff' });
-    const bell = mk('g', {}, g); mk('path', { d: 'M -34 20 C -34 -30 -22 -44 0 -46 C 22 -44 34 -30 34 20 L 44 32 H -44 Z', fill: C.gold }, bell); mk('circle', { cx: 0, cy: 42, r: 10, fill: C.gold }, bell);
+    const head = txt(g, CX, 270, p.text || 'New money tips every week', { size: 54, weight: 900, fill: C.ink });
+    const W = 340, H = 112, GAP = 34, Y = 480;
+    const xs = [-1, 0, 1].map(i => CX + i * (W + GAP));
+    const mkBtn = (x, label, color, icon) => {
+      const b = mk('g', {}, g);
+      const bg = mk('rect', { x: -W / 2, y: -H / 2, width: W, height: H, rx: H / 2, fill: '#fff', stroke: color, 'stroke-width': 7 }, b);
+      const ic = mk('g', { transform: 'translate(-100,0)' }, b); icon(ic, color);
+      const lb = txt(b, 40, 22, label, { font: 'Anton', size: 54, fill: color });
+      return { b, bg, ic, lb, x, color };
+    };
+    const thumb = (ic, c) => { ic.innerHTML = ''; mk('rect', { x: -34, y: -6, width: 16, height: 40, rx: 4, fill: c }, ic); mk('path', { d: 'M -14 -6 L 2 -34 C 6 -42 20 -40 18 -28 L 14 -12 L 34 -12 C 42 -12 46 -4 43 4 L 36 28 C 34 33 30 36 24 36 L -14 36 Z', fill: c }, ic); };
+    const arrow = (ic, c) => { ic.innerHTML = ''; mk('path', { d: 'M -30 26 C -30 -4 -8 -16 14 -16 L 14 -34 L 42 -6 L 14 22 L 14 4 C -4 4 -18 10 -30 26 Z', fill: c }, ic); };
+    const bellIc = (ic, c) => { ic.innerHTML = ''; mk('path', { d: 'M -26 18 C -26 -20 -16 -32 0 -34 C 16 -32 26 -20 26 18 L 34 28 H -34 Z', fill: c }, ic); mk('circle', { cx: 0, cy: 36, r: 8, fill: c }, ic); };
+    const like = mkBtn(xs[0], 'LIKE', C.sky, thumb), share = mkBtn(xs[1], 'SHARE', C.green, arrow), sub = mkBtn(xs[2], 'SUBSCRIBE', C.red, bellIc);
+    sub.lb.setAttribute('font-size', 46); sub.lb.setAttribute('x', 34);
+    const burst = Array.from({ length: 8 }, (_, i) => mk('circle', { r: 9, fill: i % 2 ? C.sky : C.gold, opacity: 0 }, g));
     const cursor = mk('path', { d: 'M 0 0 L 0 56 L 14 42 L 24 66 L 34 62 L 24 38 L 44 38 Z', fill: '#fff', stroke: C.ink, 'stroke-width': 5, 'stroke-linejoin': 'round' }, g);
-    const tb = textBlock(g, CX, 720, p.text || 'More money tips every week', { size: 46, weight: 900, maxLines: 2, maxW: 1000 });
-    const click = Math.min(1.6, T * 0.4);
+    // click times: when the narrator says each word (falls back to an even spread)
+    const [tL, tS, tB] = cues(['like', 'share', 'subscribe'], T, 0.7, 0.8);
+    const clicks = [[like, tL], [share, tS], [sub, tB]];
     return t => {
-      const pressed = t > click;
-      bg.setAttribute('fill', pressed ? '#9CA3AF' : '#EF4444');
-      label.textContent = pressed ? 'SUBSCRIBED' : 'SUBSCRIBE';
-      const press = t > click && t < click + 0.15 ? 0.94 : 1;
-      setPop(btn, CX, 450, pop(t, 0.1) * press);
-      setPop(bell, CX + 360, 450, pop(t, click + 0.2), `rotate(${t > click + 0.2 ? Math.sin(t * 22) * 16 * (1 - seg(t, click + 0.2, click + 1.4)) : 0})`);
-      const cp = easeInOut(seg(t, 0.4, click));
-      cursor.setAttribute('transform', `translate(${lerp(1700, CX + 120, cp)},${lerp(800, 470, cp)}) scale(${press})`);
-      cursor.setAttribute('opacity', seg(t, 0.3, 0.5) * (1 - seg(t, click + 0.8, click + 1.1)));
-      tb.el.setAttribute('opacity', seg(t, click + 0.3, click + 0.7));
+      head.setAttribute('opacity', seg(t, 0.05, 0.35));
+      clicks.forEach(([btn, at], i) => {
+        const on = t > at;
+        const press = t > at && t < at + 0.14 ? 0.92 : 1;
+        btn.bg.setAttribute('fill', on ? btn.color : '#fff');
+        btn.lb.setAttribute('fill', on ? '#fff' : btn.color);
+        if (btn === sub) btn.lb.textContent = on ? 'SUBSCRIBED' : 'SUBSCRIBE';
+        (btn === like ? thumb : btn === share ? arrow : bellIc)(btn.ic, on ? '#fff' : btn.color);
+        const wiggle = btn === sub && on ? `rotate(0)` : '';
+        setPop(btn.b, btn.x, Y + Math.sin(t * 2 + i) * 4, pop(t, 0.1 + i * 0.15) * press, wiggle);
+        if (btn === sub && on) btn.ic.setAttribute('transform', `translate(-118,0) rotate(${Math.sin(t * 22) * 18 * (1 - seg(t, at + 0.1, at + 1.4))})`);
+        else if (btn === sub) btn.ic.setAttribute('transform', 'translate(-118,0)');
+        if (btn === share && on) btn.ic.setAttribute('transform', `translate(${-100 + Math.sin(seg(t, at, at + 0.5) * Math.PI) * 14},0)`);
+      });
+      burst.forEach((b, i) => {
+        const k = seg(t, tL, tL + 0.6), a = i / 8 * Math.PI * 2;
+        b.setAttribute('opacity', t > tL && k < 1 ? 1 - k : 0);
+        b.setAttribute('cx', like.x - 100 + Math.cos(a) * 90 * easeOut(k)); b.setAttribute('cy', Y + Math.sin(a) * 70 * easeOut(k));
+      });
+      // cursor glides to each button just before its click
+      const pts = [[1750, 860, 0]].concat(clicks.map(([btn, at]) => [btn.x + 60, Y + 10, at]));
+      let cx = pts[0][0], cy = pts[0][1];
+      for (let i = 1; i < pts.length; i++) {
+        const k = easeInOut(seg(t, Math.max(pts[i - 1][2] + 0.15, pts[i][2] - 0.55), pts[i][2]));
+        if (t >= pts[i - 1][2]) { cx = lerp(pts[i - 1][0], pts[i][0], k); cy = lerp(pts[i - 1][1], pts[i][1], k); }
+      }
+      const pressed = clicks.some(([, at]) => t > at && t < at + 0.14);
+      cursor.setAttribute('transform', `translate(${cx},${cy}) scale(${pressed ? 0.88 : 1})`);
+      cursor.setAttribute('opacity', seg(t, 0.3, 0.5) * (1 - seg(t, tB + 0.8, tB + 1.1)));
     };
   },
 };

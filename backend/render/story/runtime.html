@@ -19,6 +19,7 @@ text { font-family: Baloo; }
     <g id="question"></g>
     <g id="moral"></g>
     <g id="ending"></g>
+    <g id="cta"></g>
     <g id="title"></g>
     <g id="brand"></g>
     <path id="iris" fill="#2D1B4E" fill-rule="evenodd" d=""/>
@@ -263,7 +264,7 @@ function buildBubble(line, color, name) {
 function captionsFor(lines) {
   const out = [];
   for (const l of lines) {
-    if (l.who !== 'narrator' || l.kind === 'title' || l.kind === 'bye') continue;
+    if (l.who !== 'narrator' || l.kind === 'title' || l.kind === 'bye' || l.kind === 'cta') continue;
     const parts = l.text.split(/(?<=[,।!?]|\.\.\.)\s+/).flatMap(p => {
       if (p.length <= 48) return [p];
       const ws = p.split(' '); const res = []; let cur = '';
@@ -352,8 +353,72 @@ function buildEnding() {
   return { g, bg, chars };
 }
 
+// Like → Share → Subscribe panel (tapped on the spoken words)
+function buildCta() {
+  const g = $('cta');
+  const head = mk('text', { x: 960, y: 150, 'font-size': 96, 'font-weight': 800, 'text-anchor': 'middle', fill: '#FFEB3B', stroke: '#6D3F1A', 'stroke-width': 14, 'paint-order': 'stroke' }, g);
+  head.textContent = 'कहानी अच्छी लगी?';
+  const thumb = (ic, c) => { ic.innerHTML = ''; mk('rect', { x: -34, y: -6, width: 16, height: 40, rx: 4, fill: c }, ic); mk('path', { d: 'M -14 -6 L 2 -34 C 6 -42 20 -40 18 -28 L 14 -12 L 34 -12 C 42 -12 46 -4 43 4 L 36 28 C 34 33 30 36 24 36 L -14 36 Z', fill: c }, ic); };
+  const arrow = (ic, c) => { ic.innerHTML = ''; mk('path', { d: 'M -30 26 C -30 -4 -8 -16 14 -16 L 14 -34 L 42 -6 L 14 22 L 14 4 C -4 4 -18 10 -30 26 Z', fill: c }, ic); };
+  const bell = (ic, c) => { ic.innerHTML = ''; mk('path', { d: 'M -26 18 C -26 -20 -16 -32 0 -34 C 16 -32 26 -20 26 18 L 34 28 H -34 Z', fill: c }, ic); mk('circle', { cx: 0, cy: 36, r: 8, fill: c }, ic); };
+  const specs = [['लाइक', '#1E88E5', thumb], ['शेयर', '#43A047', arrow], ['सब्सक्राइब', '#E53935', bell]];
+  const H = 132, size = 62;
+  const textW = specs.map(([l]) => Math.max(measure(l, size), l === 'सब्सक्राइब' ? measure('सब्सक्राइब्ड', size) : 0));
+  const widths = textW.map(w => w + 230);
+  const gap = 44, total = widths.reduce((a, b) => a + b, 0) + gap * 2;
+  let x = 960 - total / 2;
+  const btns = specs.map(([label, color, icon], i) => {
+    const w = widths[i]; const cx = x + w / 2; x += w + gap;
+    const b = mk('g', {}, g);
+    mk('rect', { x: -w / 2, y: -H / 2 + 10, width: w, height: H, rx: H / 2, fill: 'rgba(0,0,0,0.18)' }, b);
+    const bg = mk('rect', { x: -w / 2, y: -H / 2, width: w, height: H, rx: H / 2, fill: '#fff', stroke: color, 'stroke-width': 9 }, b);
+    const ic = mk('g', { transform: `translate(${-w / 2 + 82},0) scale(1.25)` }, b); icon(ic, color);
+    const lb = mk('text', { x: -w / 2 + 160 + textW[i] / 2, y: 22, 'font-size': size, 'font-weight': 800, 'text-anchor': 'middle', fill: color }, b); lb.textContent = label;
+    const stars = Array.from({ length: 8 }, (_, k) => mk('path', { d: 'M 0 -18 L 5 -5 L 18 0 L 5 5 L 0 18 L -5 5 L -18 0 L -5 -5 Z', fill: k % 2 ? '#FFD740' : color, opacity: 0 }, g));
+    return { b, bg, ic, lb, label, color, icon, cx, w, stars, iconX: -w / 2 + 82 };
+  });
+  const cursor = mk('path', { d: 'M 0 0 L 0 56 L 14 42 L 24 66 L 34 62 L 24 38 L 44 38 Z', fill: '#fff', stroke: '#3E2712', 'stroke-width': 5, 'stroke-linejoin': 'round' }, g);
+  return { head, btns, cursor };
+}
+
+function drawCta(t, line, out) {
+  const C = CTA, marks = line.marks || [0.3, 0.55, 0.8].map(f => line.start + (line.end - line.start) * f);
+  const Y = 320;
+  $('cta').setAttribute('opacity', 1 - out);
+  C.head.setAttribute('transform', `translate(0,${Math.sin(t * 3) * 6}) translate(960,150) scale(${pop(t, line.start - 0.3, 0.5)}) translate(-960,-150)`);
+  C.btns.forEach((B, i) => {
+    const at = marks[i], on = t >= at;
+    const press = t >= at && t < at + 0.14 ? 0.9 : 1;
+    B.bg.setAttribute('fill', on ? B.color : '#fff');
+    B.lb.setAttribute('fill', on ? '#fff' : B.color);
+    if (i === 2) B.lb.textContent = on ? 'सब्सक्राइब्ड' : 'सब्सक्राइब';
+    B.icon(B.ic, on ? '#fff' : B.color);
+    const rot = i === 2 && on ? Math.sin(t * 22) * 18 * (1 - seg(t, at + 0.1, at + 1.5)) : 0;
+    B.ic.setAttribute('transform', `translate(${B.iconX},0) scale(1.25) rotate(${rot})`);
+    const appear = pop(t, line.start + i * 0.25, 0.5);
+    const bounce = on ? -Math.abs(Math.sin((t - at) * 6)) * 10 * (1 - seg(t, at, at + 1.2)) : Math.sin(t * 2.2 + i) * 5;
+    B.b.setAttribute('transform', `translate(${B.cx},${Y + bounce}) scale(${appear * press})`);
+    B.stars.forEach((st, k) => {
+      const kk = seg(t, at, at + 0.7), a = k / 8 * Math.PI * 2;
+      st.setAttribute('opacity', on && kk < 1 ? 1 - kk : 0);
+      st.setAttribute('transform', `translate(${B.cx + Math.cos(a) * (B.w / 2 + 30) * easeOut(kk)},${Y + Math.sin(a) * 110 * easeOut(kk)}) rotate(${t * 200})`);
+    });
+  });
+  // cursor glides onto each button just before its tap
+  const pts = [[1760, 900, line.start]].concat(C.btns.map((B, i) => [B.cx + 40, Y + 20, marks[i]]));
+  let cx = pts[0][0], cy = pts[0][1];
+  for (let i = 1; i < pts.length; i++) {
+    if (t < pts[i - 1][2]) break;
+    const k = ease(seg(t, Math.max(pts[i - 1][2] + 0.15, pts[i][2] - 0.6), pts[i][2]));
+    cx = lerp(pts[i - 1][0], pts[i][0], k); cy = lerp(pts[i - 1][1], pts[i][1], k);
+  }
+  const pressed = marks.some(m => t >= m && t < m + 0.14);
+  C.cursor.setAttribute('transform', `translate(${cx},${cy}) scale(${(pressed ? 0.85 : 1) * 1.5})`);
+  C.cursor.setAttribute('opacity', seg(t, line.start, line.start + 0.3) * (1 - seg(t, marks[2] + 0.8, marks[2] + 1.1)));
+}
+
 // ───────────────────────── setup ─────────────────────────
-let TITLE, QUESTION, MORAL, CAPS, BUBBLES = [], QLINES = [], MORAL_LINE, BYE_LINE, SWITCH = [];
+let TITLE, QUESTION, MORAL, CAPS, BUBBLES = [], QLINES = [], MORAL_LINE, BYE_LINE, CTA_LINE, CTA, SWITCH = [];
 window.setData = function (data) {
   D = data;
   D.castById = Object.fromEntries(D.story.cast.map(c => [c.id, c]));
@@ -361,19 +426,21 @@ window.setData = function (data) {
   defs($('svg'));
   MORAL_LINE = D.lines.find(l => l.kind === 'moral');
   BYE_LINE = D.lines.find(l => l.kind === 'bye');
+  CTA_LINE = D.lines.find(l => l.kind === 'cta');
   const beatLines = D.lines.filter(l => l.kind === 'beat');
   const nS = D.story.scenes.length;
   for (let si = 0; si < nS; si++) {
     const ls = beatLines.filter(l => l.scene === si);
     SWITCH[si] = si === 0 ? 0 : ls[0].start - 0.55;
   }
-  SWITCH[nS] = BYE_LINE.start - 0.6;   // ending scene
+  SWITCH[nS] = (CTA_LINE || BYE_LINE).start - 0.6;   // ending scene (like/share/subscribe, then goodbye)
   D.story.scenes.forEach((sc, si) => {
     const ls = []; beatLines.filter(l => l.scene === si).forEach(l => { ls[l.beat] = l; });
     SC.push(planScene(si, sc, ls, SWITCH[si], SWITCH[si + 1]));
   });
   END = buildEnding();
   TITLE = buildTitle(); QUESTION = buildQuestion(); MORAL = buildMoral(); buildBrand();
+  if (CTA_LINE) CTA = buildCta();
   CAPS = captionsFor(D.lines);
   QLINES = D.lines.filter(l => l.question);
   D.lines.forEach(l => {
@@ -484,7 +551,9 @@ function render(t) {
       const st = SWITCH[nS] + 0.3 + c.i * 0.15;
       const dy = (1 - easeOut(seg(t, st, st + 0.5))) * 500 - Math.abs(Math.sin((t - st) * 4)) * 20 * (t > st + 0.5 ? 1 : 0);
       c.root.setAttribute('transform', `translate(${c.x},${880 + dy}) scale(${c.scale * (c.x < 960 ? 1 : -1)},${c.scale})`);
-      c.rig.update({ t: t + c.i, mouth: 0, emotion: 'happy', pose: 'wave', walkPhase: 0, blink: ((t + c.i) % 3) < 0.12 });
+      const subAt = CTA_LINE && CTA_LINE.marks ? CTA_LINE.marks[2] : -9;
+      const cheer = t >= subAt && t < subAt + 1.6;
+      c.rig.update({ t: t + c.i, mouth: 0, emotion: 'happy', pose: cheer ? 'celebrate' : 'wave', walkPhase: 0, blink: ((t + c.i) % 3) < 0.12 });
     });
   }
   $('world').setAttribute('transform', `translate(960,540) scale(${cam.s}) translate(${-cam.x},${-cam.y})`);
@@ -536,9 +605,11 @@ function render(t) {
     $('tint').setAttribute('opacity', 0.35 * seg(t, MORAL_LINE.start - 0.8, MORAL_LINE.start));
   } else { $('moral').setAttribute('opacity', 0); $('tint').setAttribute('opacity', 0); }
 
-  // ending text
-  if (ending) {
-    const s = pop(t, SWITCH[nS] + 0.5, 0.5);
+  // like / share / subscribe, then the goodbye text
+  if (ending && CTA_LINE && t < BYE_LINE.start + 0.2) drawCta(t, CTA_LINE, ease(seg(t, BYE_LINE.start - 0.35, BYE_LINE.start + 0.1)));
+  else $('cta').setAttribute('opacity', 0);
+  if (ending && (!CTA_LINE || t >= BYE_LINE.start - 0.2)) {
+    const s = pop(t, CTA_LINE ? BYE_LINE.start - 0.2 : SWITCH[nS] + 0.5, 0.5);
     $('ending').setAttribute('transform', `translate(960,${250 + Math.sin(t * 3) * 10}) scale(${s}) rotate(${Math.sin(t * 2) * 2})`);
     $('ending').setAttribute('opacity', 1);
   } else $('ending').setAttribute('opacity', 0);
@@ -570,7 +641,7 @@ window.renderThumbnail = function () {
   const S = SC[0];
   SC.forEach((x, i) => { x.g.style.display = i === 0 ? '' : 'none'; });
   END.g.style.display = 'none';
-  ['bubbles', 'question', 'moral', 'ending', 'title', 'brand', 'iris'].forEach(id => $(id).setAttribute('opacity', 0));
+  ['bubbles', 'question', 'moral', 'ending', 'cta', 'title', 'brand', 'iris'].forEach(id => $(id).setAttribute('opacity', 0));
   $('capIn').style.visibility = 'hidden';
   $('tint').setAttribute('opacity', 0);
   S.bg.update(2);

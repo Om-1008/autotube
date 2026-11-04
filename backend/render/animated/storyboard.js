@@ -18,7 +18,7 @@ const SPEC = `Templates (params):
 - checklist {title, items:[string]}  — 2–5 short actions (≤8 words each)
 - timeline {title?, points:[{label, value?}], prefix?}  — 3–5 points in time
 - icons {title?, items:[{label, icon}]}  — 2–4 things in a group
-- outro {text}  — ONLY the last beat (subscribe call to action)
+- outro {text}  — ONLY the last beat; it must cover ALL closing call-to-action sentences (like / share / subscribe). text = a short promise like "New money tips every week"
 Every beat also has: from, to (sentence numbers, inclusive), template, mood (${MOODS.join('|')}), kicker? (optional 1–3 word label shown at the top, e.g. "THE PROBLEM").
 Icons (use only these): ${ICONS.join(', ')}.`;
 
@@ -180,7 +180,7 @@ ${SPEC}
 
 Rules:
 - Beats must cover every sentence ${range[0]}–${range[1]} exactly once, in order, with no gaps or overlaps.
-${isFirst ? `- The first beat must be "title" (covering sentence ${range[0]} only, or ${range[0]}–${range[0] + 1}).\n` : ''}${isLast ? `- The last beat must be "outro" covering the final call-to-action sentence(s).\n` : ''}- Where a sentence is marked [SECTION START], a "heading" beat must start at that sentence (it may cover just that sentence) using that section title.
+${isFirst ? `- The first beat must be "title" (covering sentence ${range[0]} only, or ${range[0]}–${range[0] + 1}).\n` : ''}${isLast ? `- The last beat must be "outro" covering every closing call-to-action sentence (like, share, subscribe), starting at the first of them.\n` : ''}- Where a sentence is marked [SECTION START], a "heading" beat must start at that sentence (it may cover just that sentence) using that section title.
 - Numbers must come from the narration you are given (or simple arithmetic on them). Never invent statistics, prices or percentages. If there are no numbers, use keyword, checklist, icons, compare or timeline without values.
 - Prefer data templates (counter, stat, bars, flow, split, timeline) whenever the narration contains numbers.
 - Don't use the same template more than twice in a row. Match the character's mood to the narration.
@@ -270,7 +270,7 @@ async function buildStoryboard({ title, sentences, sectionStarts, reporter }) {
   }
   // Outro last if the final beat is a call to action
   const last = beats[beats.length - 1];
-  if (last && last.template !== 'outro' && /subscribe|comment|like this video|hit the bell|see you/i.test(sentences.slice(last.from, last.to + 1).map(s => s.text).join(' '))) {
+  if (last && last.template !== 'outro' && /subscribe|share (this|it)|like (this|the) video|comment|hit the bell|see you/i.test(sentences.slice(last.from, last.to + 1).map(s => s.text).join(' '))) {
     beats[beats.length - 1] = { from: last.from, to: last.to, template: 'outro', mood: 'waving', params: { text: 'New money tips every week' } };
   }
   // Characters wave at the start/end; keep moods sensible

@@ -39,21 +39,25 @@ async function pitchShift(src, dst, pitch) {
 }
 
 // Flatten the story into spoken lines (title intro, scenes, moral, goodbye)
-function spokenLines(story) {
+const CTA_WORDS = ['लाइक', 'शेयर', 'सब्सक्राइब'];
+
+function spokenLines(story, brand = 'कहानी पिटारा') {
   const voiceOf = id => (story.cast.find(c => c.id === id) || {}).voice || 'male';
   const lines = [{ kind: 'title', who: 'narrator', preset: 'narrator', text: `आज की कहानी है... ${story.title}!` }];
   story.scenes.forEach((sc, si) => sc.beats.forEach((b, bi) => lines.push({
     kind: 'beat', scene: si, beat: bi, who: b.speaker, preset: b.speaker === 'narrator' ? 'narrator' : voiceOf(b.speaker), text: b.text, question: b.question,
   })));
   lines.push({ kind: 'moral', who: 'narrator', preset: 'narrator', text: `तो बच्चों, इस कहानी से हमें क्या सीख मिली? ${story.moral}` });
+  // Gentle, parent-directed call to action (kids' content): like → share → subscribe
+  lines.push({ kind: 'cta', who: 'narrator', preset: 'narrator', text: `कहानी अच्छी लगी? तो मम्मी-पापा से कहो, वीडियो को लाइक करें, दोस्तों के साथ शेयर करें, और ${brand} को सब्सक्राइब करें!` });
   lines.push({ kind: 'bye', who: 'narrator', preset: 'narrator', text: 'फिर मिलेंगे, एक नई कहानी के साथ। बाय बाय!' });
   return lines;
 }
 
-async function buildStoryAudio(story, workDir, reporter) {
+async function buildStoryAudio(story, workDir, reporter, { brand } = {}) {
   const dir = path.join(workDir, 'voice');
   fs.mkdirSync(dir, { recursive: true });
-  const lines = spokenLines(story);
+  const lines = spokenLines(story, brand);
 
   // 1. Kokoro batch (model loads once)
   const jobs = lines.map((l, i) => ({ text: l.text, out: path.join(dir, `raw${String(i).padStart(3, '0')}.wav`), voice: PRESETS[l.preset].voice, speed: PRESETS[l.preset].speed, lang: 'hi' }));
@@ -90,6 +94,12 @@ async function buildStoryAudio(story, workDir, reporter) {
     l.end = t + l.dur;
     t = l.end + GAP;
     if (l.question) { sfx.push({ type: 'ding', at: l.start - 0.25 }, { type: 'tick', at: l.end + 0.3 }); l.pauseEnd = l.end + QUESTION_PAUSE; t = l.pauseEnd; }
+    if (l.kind === 'cta') {
+      // Button taps land on the spoken words (position in the sentence ≈ position in time)
+      l.marks = CTA_WORDS.map(w => { const i = l.text.indexOf(w); return l.start + (l.end - l.start) * (i < 0 ? 0.5 : (i + w.length * 0.5) / l.text.length); });
+      l.marks.forEach((m, i) => sfx.push({ type: i === 2 ? 'sparkle' : 'pop', at: m }));
+      t += 0.6;
+    }
     if (l.kind === 'bye') t = l.end + 2.4;
   }
   const total = t;
