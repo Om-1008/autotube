@@ -1,8 +1,9 @@
 // Kids' story job: story JSON (written by Claude at generate time) → multi-voice soundtrack →
-// 2D animation → YouTube (made for kids).
+// 2D or toy-3D animation → YouTube (made for kids).
 const fs = require('fs');
 const { buildStoryAudio } = require('./audio');
 const { renderStory } = require('./render');
+const { renderStory3D } = require('../story3d/render');
 const { youtubeTitle } = require('./writer');
 
 async function processStoryJob(job, reporter, { workDir, upload = true } = {}) {
@@ -14,11 +15,15 @@ async function processStoryJob(job, reporter, { workDir, upload = true } = {}) {
   const audio = await buildStoryAudio(story, workDir, reporter, { brand });
   reporter.log(`Soundtrack ready: ${(audio.total / 60).toFixed(1)} min`);
 
-  await reporter.stage('rendering', `Animating ${story.scenes.length} scenes`);
+  const use3d = !(job.settings && job.settings.style3d === false) && process.env.STORY_STYLE !== '2d';
+  await reporter.stage('rendering', `Animating ${story.scenes.length} scenes${use3d ? ' in 3D' : ''}`);
   const H = parseInt(process.env.OUTPUT_HEIGHT_ANIMATED || '1440', 10);
-  const { videoPath, thumbPath } = await renderStory({ story, audio, brand, workDir, reporter, width: Math.round((H * 16) / 9) });
+  const H3 = parseInt(process.env.OUTPUT_HEIGHT_3D || '1080', 10);
+  const { videoPath, thumbPath } = use3d
+    ? await renderStory3D({ story, audio, brand, workDir, reporter, width: Math.round((H3 * 16) / 9) })
+    : await renderStory({ story, audio, brand, workDir, reporter, width: Math.round((H * 16) / 9) });
   const sizeMB = +(fs.statSync(videoPath).size / 1048576).toFixed(1);
-  const stats = { durationSec: Math.round(audio.total), sizeMB, shots: story.scenes.length, voice: 'kokoro', style: 'story' };
+  const stats = { durationSec: Math.round(audio.total), sizeMB, shots: story.scenes.length, voice: 'kokoro', style: use3d ? 'story3d' : 'story' };
   reporter.log(`Video rendered: ${(audio.total / 60).toFixed(1)} min, ${sizeMB} MB`);
 
   if (!upload) { await reporter.done('rendered', { stats }); return { outPath: videoPath, thumbPath, stats }; }

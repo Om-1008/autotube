@@ -424,6 +424,7 @@ function KidsSettingsModal({ settings, onClose, onSave }) {
   const [days, setDays] = useState(settings.frequencyDays || 2);
   const [running, setRunning] = useState(settings.isRunning !== false);
   const [schedTrend, setSchedTrend] = useState(!!settings.scheduledTrending);
+  const [style3d, setStyle3d] = useState(settings.style3d !== false);
   const [saving, setSaving] = useState(false);
   const label = { fontSize: 14, margin: '18px 0 4px', color: '#1a1a2e', display: 'block', fontWeight: 700 };
   const input = { width: '100%', borderRadius: 10, border: '1px solid #ddd', padding: 10, fontSize: 14, fontFamily: 'inherit', boxSizing: 'border-box' };
@@ -454,10 +455,17 @@ function KidsSettingsModal({ settings, onClose, onSave }) {
         <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 14, marginTop: 12, cursor: 'pointer' }}>
           <input type="checkbox" checked={schedTrend} onChange={e => setSchedTrend(e.target.checked)} /> 📈 Scheduled stories use trending topics &amp; upcoming occasions
         </label>
+        <label style={label}>Animation style</label>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {[[true, '🧸 3D toy (renders in ~1–2 h)'], [false, '🎨 2D cartoon (faster)']].map(([v, l]) => (
+            <button key={l} type="button" onClick={() => setStyle3d(v)} style={{ flex: 1, padding: '10px 8px', borderRadius: 10, cursor: 'pointer', fontSize: 13, fontWeight: 700,
+              border: style3d === v ? '2px solid #e91e63' : '1px solid #ddd', background: style3d === v ? '#fce4ec' : '#fff', color: '#1a1a2e' }}>{l}</button>
+          ))}
+        </div>
         <div style={{ display: 'flex', gap: 10, marginTop: 20, justifyContent: 'flex-end' }}>
           <button onClick={onClose} style={btn('#f3f4f6', '#555')}>Cancel</button>
           <button disabled={saving} onClick={async () => {
-            setSaving(true); await onSave({ channelName: name, storyHint: hint, frequencyDays: days, isRunning: running, scheduledTrending: schedTrend }); setSaving(false); onClose();
+            setSaving(true); await onSave({ channelName: name, storyHint: hint, frequencyDays: days, isRunning: running, scheduledTrending: schedTrend, style3d }); setSaving(false); onClose();
           }} style={btn('linear-gradient(135deg, #e91e63, #c2185b)')}>{saving ? 'Saving…' : 'Save'}</button>
         </div>
       </div>

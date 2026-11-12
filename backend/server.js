@@ -605,7 +605,7 @@ app.get('/settings', (req, res) => res.json(db.of(chOf(req)).get().settings));
 
 const SETTINGS_KEYS = {
   finance: ['niche', 'audience', 'frequencyDays', 'publishHour', 'isRunning', 'affiliateLinks', 'scheduledTrending'],
-  kids: ['channelName', 'storyHint', 'frequencyDays', 'publishHour', 'isRunning', 'scheduledTrending'],
+  kids: ['channelName', 'storyHint', 'frequencyDays', 'publishHour', 'isRunning', 'scheduledTrending', 'style3d'],
   motivation: ['channelName', 'person', 'topicHint', 'frequencyDays', 'isRunning', 'scheduledTrending', 'autoApprove', 'shortsPerVideo', 'shortsGapHours'],
 };
 
@@ -620,6 +620,7 @@ app.patch('/settings', async (req, res) => {
   if ('isRunning' in patch) patch.isRunning = !!patch.isRunning;
   if ('scheduledTrending' in patch) patch.scheduledTrending = !!patch.scheduledTrending;
   if ('autoApprove' in patch) patch.autoApprove = !!patch.autoApprove;
+  if ('style3d' in patch) patch.style3d = !!patch.style3d;
   if ('person' in patch) patch.person = String(patch.person || '').trim().slice(0, 60) || 'Chanakya';
   if ('topicHint' in patch) patch.topicHint = String(patch.topicHint || '').trim().slice(0, 300);
   if ('shortsPerVideo' in patch) patch.shortsPerVideo = Math.min(3, Math.max(0, parseInt(patch.shortsPerVideo, 10) || 0));

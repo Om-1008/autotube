@@ -43,6 +43,14 @@ pitch-shifted voices per animal), mixes procedural music and sound effects, anim
 `backend/render/story/runtime.html` (lip-sync, emotions, speech bubbles, question countdowns, moral card)
 and uploads it as **made for kids**, Hindi, Film & Animation. Code: `backend/render/story/`.
 
+**3D animation (default for Kahani Pitara):** stories are animated as toy-3D (three.js) by
+`backend/render/story3d/` — 11 clay-style animals with lip-sync, emotions and poses, five 3D worlds
+(jungle, riverbank with the crocodile in the water, village, night, meadow), the same bubbles/captions/question/
+moral/like-share-subscribe overlays. It renders on the CPU (SwiftShader) at about 3 frames/s on a GitHub runner,
+so a 5-minute story takes roughly an hour (the workflow timeout is 300 min). Switch a channel back to 2D in
+⚙️ Settings → Animation style. Tuning: `OUTPUT_HEIGHT_3D` (default 1080), `STORY3D_QUALITY` (3D canvas
+resolution factor, default 0.75), `RENDER_PAGES`.
+
 Connect its YouTube channel from the dashboard (Kahani Pitara tab → 🔗 Connect YouTube), or
 `https://<render-app>/auth/youtube?channel=kids`. In Google's account picker choose the Kahani Pitara channel.
 

@@ -26,6 +26,7 @@ const CHANNELS = {
       channelName: process.env.KIDS_CHANNEL_NAME || 'कहानी पिटारा',
       frequencyDays: parseInt(process.env.KIDS_FREQUENCY_DAYS || '2'),
       storyHint: '',
+      style3d: true,          // toy-3D animation (false = classic 2D)
       publishHour: 18,
       isRunning: true,
     }),

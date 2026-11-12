@@ -1,0 +1,731 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+@font-face { font-family: Baloo; src: url(/render/fonts/Baloo2.ttf); font-weight: 400 800; }
+html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: #8fd3ff; }
+canvas { position: absolute; left: 0; top: 0; width: 1920px !important; height: 1080px !important; }
+svg { position: absolute; inset: 0; }
+text { font-family: Baloo; }
+#cap { position: absolute; left: 0; right: 0; bottom: 54px; display: flex; justify-content: center; pointer-events: none; }
+#capIn { font-family: Baloo; font-weight: 800; font-size: 62px; line-height: 1.2; color: #fff; background: rgba(62, 39, 18, 0.88);
+  padding: 6px 42px 12px; border-radius: 30px; border: 5px solid #FFD54F; box-shadow: 0 10px 0 rgba(0,0,0,0.18);
+  max-width: 1500px; text-align: center; visibility: hidden; transform-origin: 50% 100%; }
+</style>
+<script type="importmap">{"imports":{"three":"/node_modules/three/build/three.module.js","three/addons/":"/node_modules/three/examples/jsm/"}}</script>
+</head>
+<body>
+<svg id="svg" width="1920" height="1080" viewBox="0 0 1920 1080" xmlns="http://www.w3.org/2000/svg">
+  <defs id="bgDefs"></defs>
+  <g id="screen">
+    <rect id="rp" x="0" y="0" width="1920" height="1080" fill="#000" opacity="0"/>
+    <rect id="tint" x="0" y="0" width="1920" height="1080" fill="#1A0F2E" opacity="0"/>
+    <g id="fx"></g>
+    <g id="bubbles"></g>
+    <g id="question"></g>
+    <g id="moral"></g>
+    <g id="ending"></g>
+    <g id="cta"></g>
+    <g id="title"></g>
+    <g id="brand"></g>
+    <path id="iris" fill="#2D1B4E" fill-rule="evenodd" d=""/>
+  </g>
+</svg>
+<div id="cap"><div id="capIn"></div></div>
+<script type="module">
+import { THREE, stage, clay, mesh, sphere, cyl, rbox } from './toy.js';
+import { buildCharacter } from './cast3d.js';
+import { WORLDS, applyLook } from './worlds.js';
+
+const $ = id => document.getElementById(id);
+const NS = 'http://www.w3.org/2000/svg';
+const mk = (tag, attrs = {}, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; };
+const FPS = 30;
+const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, p) => a + (b - a) * p;
+const seg = (t, a, b) => clamp((t - a) / (b - a));
+const ease = p => (p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2);
+const easeOut = p => 1 - Math.pow(1 - p, 3);
+const back = p => { const c = 1.70158; return 1 + (c + 1) * Math.pow(p - 1, 3) + c * Math.pow(p - 1, 2); };
+const pop = (t, t0, d = 0.45) => (t < t0 ? 0 : back(seg(t, t0, t0 + d)));
+const hash = s => { let h = 7; for (const c of s) h = (h * 31 + c.charCodeAt(0)) % 9973; return h / 9973; };
+const COLORS = ['#E65100', '#2E7D32', '#1565C0', '#AD1457', '#6A1B9A', '#00838F', '#C62828'];
+const BASE_SCALE = 1.15;   // 2D planning scale (spacing maths kept from the 2D engine)
+const SCALE2D = { lion: 1.18, mouse: 0.62, elephant: 1.3, bear: 1.15, crocodile: 1.05 };
+const MOVE = { left: 420, center: 960, right: 1500 };
+const SLOTS = { 1: [960], 2: [690, 1230], 3: [500, 960, 1420] };
+const RIVER_SLOTS = { 1: [700], 2: [420, 860], 3: [260, 580, 900] };   // on the near bank (x3 < 0); the river starts at x3 = 0.4
+const U = 220;                                   // 2D px per 3D unit
+const X3 = x => (x - 960) / U;
+const DEPTH = [0.1, -0.35, 0.35];
+
+let D = null, SC = [], END = null, ready = false;
+const ST = stage({});
+const { renderer, scene, camera } = ST;
+document.body.insertBefore(renderer.domElement, document.body.firstChild);   // 3D behind the SVG overlays
+const fog = new THREE.Fog('#dff2ff', 22, 70); scene.fog = fog;
+const WORLD_CACHE = {};
+function world(name) {
+  if (!WORLD_CACHE[name]) { const w = (WORLDS[name] || WORLDS.meadow)(scene); w.name = name; w.group.visible = false; WORLD_CACHE[name] = w; }
+  return WORLD_CACHE[name];
+}
+function showWorld(w) {
+  Object.values(WORLD_CACHE).forEach(x => { x.group.visible = x === w; });
+  const L = w.look;
+  ST.sky.material.uniforms.top.value.set(L.top); ST.sky.material.uniforms.bottom.value.set(L.bottom);
+  fog.color.set(L.fog[0]); fog.near = L.fog[1]; fog.far = L.fog[2];
+  ST.hemi.color.set(L.hemi[0]); ST.hemi.groundColor.set(L.hemi[1]); ST.hemi.intensity = L.hemi[2];
+  ST.sun.color.set(L.sun[0]); ST.sun.intensity = L.sun[1]; ST.sun.position.set(...L.sunPos);
+  renderer.toneMappingExposure = L.exposure;
+}
+
+// ───────────────────────── text helpers ─────────────────────────
+function measure(text, size, weight = 800) {
+  const t = mk('text', { x: -9999, y: -9999, 'font-size': size, 'font-weight': weight }, $('svg'));
+  t.textContent = text; const w = t.getComputedTextLength(); t.remove(); return w;
+}
+function wrap(text, size, maxW, maxLines = 3) {
+  const words = text.split(/\s+/).filter(Boolean); const lines = []; let cur = '';
+  for (const w of words) { const nx = cur ? cur + ' ' + w : w; if (measure(nx, size) > maxW && cur) { lines.push(cur); cur = w; } else cur = nx; }
+  if (cur) lines.push(cur);
+  if (lines.length > maxLines) { const rest = lines.splice(maxLines - 1).join(' '); lines.push(rest); }
+  return lines;
+}
+function textLines(g, lines, size, attrs) {
+  const t = mk('text', { 'font-size': size, 'font-weight': 800, 'text-anchor': 'middle', ...attrs }, g);
+  lines.forEach((l, i) => { const s = mk('tspan', { x: attrs.x || 0, dy: i ? size * 1.18 : 0 }, t); s.textContent = l; });
+  return t;
+}
+
+// ───────────────────────── 3D items (for "give") ─────────────────────────
+function item3d(item) {
+  const g = new THREE.Group();
+  const M = (geo, col, pos = [0, 0, 0], sc = [1, 1, 1], rough = 0.5) => mesh(geo, clay(col, rough), g, pos, sc);
+  switch (item) {
+    case 'carrot': { const c = M(new THREE.ConeGeometry(0.09, 0.42, 14), '#fb8c00'); c.rotation.z = Math.PI; [-0.4, 0, 0.4].forEach(a => { const l = M(cyl(0.012, 0.012, 0.16, 5), '#43a047', [Math.sin(a) * 0.05, 0.27, 0]); l.rotation.z = a; }); break; }
+    case 'jamun': M(sphere(0.12, 18), '#5e1a8c', [0, 0, 0], [0.85, 1.05, 0.85], 0.3); break;
+    case 'roti': M(cyl(0.2, 0.2, 0.03, 24), '#e8c27a', [0, 0, 0], [1, 1, 1], 0.8).rotation.x = 1.2; break;
+    case 'water': M(sphere(0.13, 18), '#4fc3f7', [0, 0, 0], [1, 1.2, 1], 0.1); M(new THREE.ConeGeometry(0.09, 0.16, 16), '#4fc3f7', [0, 0.15, 0], [1, 1, 1], 0.1); break;
+    case 'stone': M(new THREE.DodecahedronGeometry(0.15, 0), '#9e9e9e', [0, 0, 0], [1.2, 0.8, 1], 0.9); break;
+    case 'cheese': M(new THREE.CylinderGeometry(0.2, 0.2, 0.14, 3, 1, false, 0, Math.PI / 2.2), '#ffd54f', [0, 0, 0], [1, 1, 1], 0.6); break;
+    case 'gift': M(rbox(0.3, 0.26, 0.3, 0.03), '#e91e63'); M(rbox(0.07, 0.27, 0.31, 0.01), '#ffeb3b'); M(rbox(0.31, 0.27, 0.07, 0.01), '#ffeb3b'); M(sphere(0.06, 12), '#ffeb3b', [0, 0.16, 0], [1.4, 0.8, 0.8]); break;
+    case 'flower': for (let i = 0; i < 6; i++) M(sphere(0.07, 12), '#ff80ab', [Math.cos(i * 1.047) * 0.09, Math.sin(i * 1.047) * 0.09, 0]); M(sphere(0.06, 12), '#ffd740', [0, 0, 0.02]); M(cyl(0.012, 0.012, 0.3, 5), '#43a047', [0, -0.18, 0]); break;
+    case 'honey': M(cyl(0.12, 0.13, 0.22, 18), '#ffb300', [0, 0, 0], [1, 1, 1], 0.25); M(cyl(0.135, 0.135, 0.06, 18), '#8d6e63', [0, 0.13, 0]); break;
+    default: M(sphere(0.13, 18), '#e53935', [0, 0, 0], [1, 0.95, 1], 0.35); M(cyl(0.012, 0.012, 0.08, 5), '#5d4037', [0, 0.15, 0]); M(sphere(0.05, 10), '#43a047', [0.05, 0.16, 0], [1.3, 0.4, 0.7]);
+  }
+  g.visible = false; scene.add(g); return g;
+}
+
+// ───────────────────────── per-character 2D effects (screen space) ─────────────────────────
+function buildFx(parent) {
+  const g = mk('g', {}, parent);
+  const F = { g };
+  F.tears = [0, 1].map(() => mk('path', { d: 'M 0 -12 C 8 0 10 6 0 12 C -10 6 -8 0 0 -12 Z', fill: '#4FC3F7', opacity: 0 }, g));
+  F.zzz = [0, 1, 2].map(i => { const t = mk('text', { 'font-size': 44 + i * 10, 'font-weight': 800, fill: '#fff', stroke: '#3949AB', 'stroke-width': 3, 'paint-order': 'stroke', opacity: 0 }, g); t.textContent = 'Z'; return t; });
+  F.q = mk('text', { 'font-size': 96, 'font-weight': 800, fill: '#FFEB3B', stroke: '#5D3A1A', 'stroke-width': 6, 'paint-order': 'stroke', 'text-anchor': 'middle', opacity: 0 }, g); F.q.textContent = '?';
+  F.ex = mk('text', { 'font-size': 110, 'font-weight': 800, fill: '#FF5252', stroke: '#fff', 'stroke-width': 7, 'paint-order': 'stroke', 'text-anchor': 'middle', opacity: 0 }, g); F.ex.textContent = '!';
+  F.steam = [0, 1].map(() => mk('circle', { r: 20, fill: '#ECEFF1', opacity: 0 }, g));
+  F.sweat = mk('path', { d: 'M 0 -16 C 10 0 12 8 0 16 C -12 8 -10 0 0 -16 Z', fill: '#81D4FA', stroke: '#0288D1', 'stroke-width': 3, opacity: 0 }, g);
+  F.haha = mk('text', { 'font-size': 64, 'font-weight': 800, fill: '#FF6F00', stroke: '#fff', 'stroke-width': 7, 'paint-order': 'stroke', 'text-anchor': 'middle', opacity: 0 }, g); F.haha.textContent = 'हा हा!';
+  F.stars = Array.from({ length: 5 }, (_, i) => mk('path', { d: 'M 0 -20 L 6 -6 L 20 0 L 6 6 L 0 20 L -6 6 L -20 0 L -6 -6 Z', fill: i % 2 ? '#FFF59D' : '#FFD740', opacity: 0 }, g));
+  F.dust = Array.from({ length: 4 }, () => mk('circle', { r: 16, fill: '#E0C9A6', opacity: 0 }, g));
+  return F;
+}
+function hideFx(F) { [...F.tears, ...F.zzz, F.q, F.ex, ...F.steam, F.sweat, F.haha, ...F.stars, ...F.dust].forEach(e => e.setAttribute('opacity', 0)); }
+function show(e, o, x, y, extra = '') { e.setAttribute('opacity', o); e.setAttribute('transform', `translate(${x},${y}) ${extra}`); }
+
+// ───────────────────────── scene planning (same choreography as the 2D engine) ─────────────────────────
+const EMO_OF = { cry: 'crying', laugh: 'laughing', angry: 'angry', scared: 'scared', celebrate: 'happy', think: 'thinking', sleep: 'sleepy', wake: 'surprised', fall: 'surprised', jump: 'happy', wave: 'happy' };
+const POSE_OF = { celebrate: 'celebrate', wave: 'wave', point: 'point', think: 'think', cry: 'sad', laugh: 'laugh', angry: 'angry', scared: 'scared', give: 'give' };
+
+function planScene(si, sc, lines, from, to) {
+  const W = world(sc.background);
+  const S = { si, W, from, to, chars: {}, gives: [], lines, cams: [] };
+  const water = !!W.water;
+  const ids = sc.characters;
+  const land = ids.filter(id => D.castById[id].species !== 'crocodile');
+  const slots = water ? RIVER_SLOTS[Math.max(1, land.length)] : SLOTS[Math.max(1, ids.length)];
+  let li = 0;
+  ids.forEach((id, k) => {
+    const c = D.castById[id];
+    const croc = c.species === 'crocodile';
+    const slot = croc ? 1480 : (water ? slots[li++] : slots[k]);
+    const firstAct = sc.beats.flatMap(b => b.actions || []).find(a => a.who === id);
+    const enters = firstAct && firstAct.do === 'enter';
+    const fromSide = firstAct && firstAct.from === 'right' ? 'right' : (firstAct && firstAct.from === 'left' ? 'left' : (slot > 960 ? 'right' : 'left'));
+    S.chars[id] = {
+      id, c, R: D.rigs[id], croc, scale: BASE_SCALE * (SCALE2D[c.species] || 1), slot, z: croc ? 0.6 : DEPTH[k % 3],
+      x0: enters ? (croc ? 1480 : (fromSide === 'right' ? 2450 : -550)) : slot,
+      visFrom: enters ? 1e9 : -Infinity, visTo: Infinity,
+      enterRise: croc && enters, moves: [], poses: [], ems: [{ t: -1e9, em: 'happy' }], jumps: [], falls: [], fly: [], color: COLORS[D.cast.indexOf(c) % COLORS.length],
+      fx: D.fx[id], blinkSeed: hash(id) * 4,
+    };
+  });
+  const posAt = (ch, t) => xAt(ch, t);
+  const maxLand = water ? 900 : 1760;
+  const minX = 160;
+  const free = (ch, x1, t0, cur) => {
+    const maxX = water && !ch.croc ? maxLand : 1760, mnX = ch.croc ? 1300 : minX;
+    for (let pass = 0; pass < 4; pass++) Object.values(S.chars).forEach(o => {
+      if (o === ch || o.croc !== ch.croc || o.visFrom > t0 + 1.5 || o.visTo <= t0) return;
+      const ox = posAt(o, t0 + 2); const gap = 165 * (o.scale + ch.scale) / BASE_SCALE;
+      if (Math.abs(x1 - ox) < gap) {
+        let nx = ox + (cur <= ox ? -gap : gap);
+        if (nx < mnX || nx > maxX) nx = ox + (cur <= ox ? gap : -gap);
+        x1 = clamp(nx, mnX, maxX);
+      }
+    });
+    return x1;
+  };
+  sc.beats.forEach((b, bi) => {
+    const l = lines[bi]; if (!l) return;
+    const t0 = l.start, t1 = Math.max(l.end, l.start + 1.4);
+    if (b.speaker !== 'narrator' && b.emotion && S.chars[b.speaker]) S.chars[b.speaker].ems.push({ t: t0, em: b.emotion });
+    (b.actions || []).forEach(a => {
+      const ch = S.chars[a.who]; if (!ch) return;
+      const cur = posAt(ch, t0 + 0.05);
+      if (EMO_OF[a.do]) ch.ems.push({ t: t0, em: EMO_OF[a.do] });
+      if (a.do === 'laugh') ch.ems.push({ t: t1 + 0.2, em: 'happy' });
+      if (POSE_OF[a.do]) ch.poses.push({ t0, t1: a.do === 'give' ? t0 + 1.2 : t1 + 0.2, pose: POSE_OF[a.do] });
+      if (a.do === 'enter') {
+        ch.visFrom = Math.min(ch.visFrom, t0);
+        if (ch.croc) { ch.riseAt = t0; }
+        else { const x1 = free(ch, ch.slot, t0, ch.x0); ch.moves.push({ t0: t0 + 0.05, t1: t0 + 1.6, x0: ch.x0, x1, pose: 'run' }); }
+      } else if (a.do === 'exit') {
+        const side = a.to === 'right' || a.to === 'left' ? a.to : (cur > 960 ? 'right' : 'left');
+        if (ch.croc) { ch.sinkAt = t0 + 0.2; ch.visTo = t0 + 1.4; }
+        else { ch.moves.push({ t0: t0 + 0.1, t1: t0 + 1.7, x0: cur, x1: side === 'right' && !water ? 2550 : -650, pose: 'run' }); ch.visTo = t0 + 1.7; }
+      } else if (a.do === 'walk_to' || a.do === 'run_to') {
+        let x1;
+        if (MOVE[a.to] !== undefined) x1 = water ? { left: 300, center: 620, right: 900 }[a.to] : MOVE[a.to];
+        else if (S.chars[a.to]) { const ox = posAt(S.chars[a.to], t0); x1 = ox + (cur < ox ? -260 : 260); }
+        else x1 = cur + 300;
+        if (ch.croc) x1 = clamp(x1, 1300, 1900); else if (water) x1 = Math.min(x1, maxLand);
+        x1 = clamp(x1, ch.croc ? 1300 : minX, 1740);
+        x1 = free(ch, x1, t0, cur);
+        const run = a.do === 'run_to'; const dur = Math.max(run ? 0.6 : 1.0, Math.abs(x1 - cur) / (run ? 800 : 380));
+        if (Math.abs(x1 - cur) > 10) ch.moves.push({ t0: t0 + 0.05, t1: t0 + 0.05 + dur, x0: cur, x1, pose: ch.croc ? 'idle' : (run ? 'run' : 'walk') });
+      } else if (a.do === 'jump') ch.jumps.push(t0 + 0.1);
+      else if (a.do === 'fall') ch.falls.push(t0 + 0.15);
+      else if (a.do === 'fly') ch.fly.push({ t: t0, on: true });
+      else if (a.do === 'land') ch.fly.push({ t: t0, on: false });
+      else if (a.do === 'sleep') ch.poses.push({ t0, t1: Infinity, pose: 'sleep', sleep: true });
+      else if (a.do === 'wake') ch.poses.forEach(p => { if (p.sleep && p.t1 === Infinity) p.t1 = t0; });
+      if (a.do === 'give' && S.chars[a.to]) S.gives.push({ t: t0 + 0.35, from: a.who, to: a.to, item: a.item || 'fruit', m: item3d(a.item || 'fruit') });
+    });
+  });
+  Object.values(S.chars).forEach(ch => { if (ch.visFrom === 1e9) ch.visFrom = -Infinity; });
+  // camera keyframes per beat (2D framing: x centre + zoom), turned into a 3D camera later
+  S.cams.push({ t: from, x: water ? 1000 : 960, y: 540, s: 1 });
+  sc.beats.forEach((b, bi) => {
+    const l = lines[bi]; if (!l) return;
+    const tt = l.start + 0.8;
+    const vis = Object.values(S.chars).filter(ch => tt >= ch.visFrom && tt < ch.visTo);
+    let cam;
+    if (b.question || !vis.length) cam = { x: water ? 1000 : 960, y: 540, s: 1 };
+    else if (b.speaker !== 'narrator' && S.chars[b.speaker] && vis.includes(S.chars[b.speaker])) {
+      const sp = S.chars[b.speaker]; const sx = xAt(sp, tt);
+      const others = vis.filter(v => v !== sp).map(v => xAt(v, tt));
+      const near = others.length ? others.reduce((a, x) => (Math.abs(x - sx) < Math.abs(a - sx) ? x : a)) : sx;
+      const s = Math.abs(near - sx) > 700 ? 1.2 : 1.38;
+      const tall = Math.max(...vis.filter(v => Math.abs(xAt(v, tt) - sx) < 700).map(v => v.R.frameH * v.R.scale));
+      cam = { x: lerp(sx, near, 0.3), s, y: 540, h: Math.max(sp.R.frameH * sp.R.scale, tall * 0.8) };
+    } else {
+      const xs = vis.map(v => xAt(v, tt)); const mn = Math.min(...xs) - 330, mx = Math.max(...xs) + 330;
+      const s = clamp(1920 / (mx - mn), 1, 1.18); cam = { x: (mn + mx) / 2, s, y: 540 };
+    }
+    S.cams.push({ t: l.start - 0.2, ...cam, side: bi % 2 ? 1 : -1 });
+  });
+  S.cams.forEach((k, i) => { k.from = i ? camEval(S.cams[i - 1], k.t) : { x: k.x, y: k.y, s: k.s, side: k.side || 0, h: k.h || 1.7 }; });
+  return S;
+}
+function camEval(k, t) { const p = ease(seg(t, k.t, k.t + 1.1)); return { x: lerp(k.from.x, k.x, p), y: 540, s: lerp(k.from.s, k.s, p), side: lerp(k.from.side || 0, k.side || 0, p), h: lerp(k.from.h || 1.7, k.h || 1.7, p) }; }
+function camAt(S, t) {
+  let k = S.cams[0]; for (const c of S.cams) { if (c.t <= t) k = c; else break; }
+  return camEval(k, t);
+}
+function xAt(ch, t) {
+  let x = ch.x0;
+  for (const m of ch.moves) { if (t < m.t0) break; x = t >= m.t1 ? m.x1 : lerp(m.x0, m.x1, ease(seg(t, m.t0, m.t1))); }
+  return x;
+}
+function moveAt(ch, t) { return ch.moves.find(m => t >= m.t0 && t < m.t1); }
+function emotionAt(ch, t) { let e = 'happy'; for (const x of ch.ems) if (x.t <= t) e = x.em; return e; }
+function poseAt(ch, t) { let p = null; for (const x of ch.poses) if (t >= x.t0 && t < x.t1) p = x; return p; }
+function flyingAt(ch, t) { let f = false; for (const x of ch.fly) if (x.t <= t) f = x.on; return f; }
+function mouthAt(id, t) { const e = D.env[id]; if (!e) return 0; const f = Math.round(t * FPS); return Math.max(e[f] || 0, (e[f - 1] || 0) * 0.6); }
+
+// facing: +1 right, -1 left, 0 = toward camera; smoothed over the last 0.4 s (pure function of t)
+function faceRaw(S, ch, t) {
+  if (ch.croc) return -1;
+  const mv = moveAt(ch, t); const x = xAt(ch, t);
+  if (mv) return mv.x1 >= mv.x0 ? 1 : -1;
+  const others = Object.values(S.chars).filter(o => o !== ch && t >= o.visFrom && t < o.visTo);
+  const speaking = others.find(o => mouthAt(o.id, t) > 0.05);
+  if (speaking) return xAt(speaking, t) >= x ? 1 : -1;
+  if (others.length) return others.reduce((a, o) => a + xAt(o, t), 0) / others.length >= x ? 1 : -1;
+  return 0;
+}
+function faceAt(S, ch, t) { let s = 0; for (let k = 0; k < 8; k++) s += faceRaw(S, ch, t - k * 0.05); return s / 8; }
+
+// 3D camera from the 2D framing
+function place3dCamera(c, t, water) {
+  const tx = clamp(X3(c.x), water ? -3.6 : -3.2, water ? 2.2 : 3.2);
+  const s = c.s;
+  const zk = clamp((s - 1) / 0.38), H = clamp(c.h || 1.7, 0.8, 2.6);
+  const d = 8.2 / Math.pow(s, 1.9) * lerp(1, Math.pow(H / 1.7, 0.85), zk);
+  const lookY = lerp(0.78, H * 0.6, zk);
+  const side = (c.side || 0) * clamp((s - 1) * 4) * 0.5;
+  camera.position.set(tx + side + Math.sin(t * 0.21) * 0.25, lookY + 0.55 + d * 0.16, d + 0.2);
+  camera.lookAt(tx + side * 0.3, lookY, 0);
+}
+
+// ───────────────────────── speech bubbles / captions ─────────────────────────
+function buildBubble(line, color, name) {
+  const g = mk('g', { opacity: 0 }, $('bubbles'));
+  const size = 50;
+  const lines = wrap(line.text, size, 620, 3);
+  const w = Math.max(...lines.map(l => measure(l, size))) + 80, h = lines.length * size * 1.18 + 52;
+  const tail = mk('path', { d: '', fill: '#fff', stroke: color, 'stroke-width': 7, 'stroke-linejoin': 'round' }, g);
+  mk('rect', { x: -w / 2, y: -h, width: w, height: h, rx: 42, fill: '#fff', stroke: color, 'stroke-width': 7 }, g);
+  const cover = mk('rect', { x: -30, y: -10, width: 60, height: 14, fill: '#fff' }, g);
+  textLines(g, lines, size, { x: 0, y: -h + 26 + size * 0.86, fill: '#3E2712' });
+  const nw = measure(name, 36) + 44;
+  const tag = mk('g', { transform: `translate(${-w / 2 + 24 + nw / 2},${-h - 4}) rotate(-4)` }, g);
+  mk('rect', { x: -nw / 2, y: -26, width: nw, height: 52, rx: 26, fill: color, stroke: '#fff', 'stroke-width': 5 }, tag);
+  const nt = mk('text', { x: 0, y: 12, 'font-size': 36, 'font-weight': 800, fill: '#fff', 'text-anchor': 'middle' }, tag); nt.textContent = name;
+  return { g, tail, cover, w, h };
+}
+function captionsFor(lines) {
+  const out = [];
+  for (const l of lines) {
+    if (l.who !== 'narrator' || l.kind === 'title' || l.kind === 'bye' || l.kind === 'cta') continue;
+    const parts = l.text.split(/(?<=[,।!?]|\.\.\.)\s+/).flatMap(p => {
+      if (p.length <= 48) return [p];
+      const ws = p.split(' '); const res = []; let cur = '';
+      ws.forEach(w => { if ((cur + ' ' + w).length > 44 && cur) { res.push(cur); cur = w; } else cur = cur ? cur + ' ' + w : w; });
+      if (cur) res.push(cur); return res;
+    }).filter(Boolean);
+    const tot = parts.reduce((a, p) => a + p.length + 4, 0); let t0 = l.start;
+    parts.forEach((p, i) => { const d = (l.end - l.start) * (p.length + 4) / tot; out.push({ a: t0, b: i === parts.length - 1 ? (l.pauseEnd || l.end + 0.25) : t0 + d, text: p }); t0 += d; });
+  }
+  return out;
+}
+
+// ───────────────────────── screen cards ─────────────────────────
+function buildTitle() {
+  const g = $('title');
+  const size = 104;
+  const lines = wrap(D.story.title, size, 1300, 2);
+  const w = Math.max(...lines.map(l => measure(l, size))) + 160, h = lines.length * size * 1.15 + 110;
+  const board = mk('g', {}, g);
+  [-1, 1].forEach(s => mk('rect', { x: s * (w / 2 - 90) - 14, y: h / 2 - 10, width: 28, height: 260, rx: 8, fill: '#6D4C41' }, board));
+  mk('rect', { x: -w / 2, y: -h / 2 + 12, width: w, height: h, rx: 36, fill: '#5D3A1A' }, board);
+  mk('rect', { x: -w / 2, y: -h / 2, width: w, height: h, rx: 36, fill: '#A1662F', stroke: '#6D3F1A', 'stroke-width': 10 }, board);
+  for (let i = 1; i < 4; i++) mk('line', { x1: -w / 2 + 20, x2: w / 2 - 20, y1: -h / 2 + h * i / 4, y2: -h / 2 + h * i / 4, stroke: '#8D5524', 'stroke-width': 4, opacity: 0.6 }, board);
+  [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([a, b]) => mk('circle', { cx: a * (w / 2 - 30), cy: b * (h / 2 - 30), r: 9, fill: '#FFD54F', stroke: '#6D3F1A', 'stroke-width': 3 }, board));
+  lines.forEach((l, i) => { const t = mk('text', { x: 0, y: -h / 2 + 55 + size * 0.85 + i * size * 1.15, 'font-size': size, 'font-weight': 800, 'text-anchor': 'middle', fill: '#FFE082', stroke: '#4E2A0E', 'stroke-width': 12, 'paint-order': 'stroke' }, board); t.textContent = l; });
+  const rib = mk('g', {}, g);
+  const rw = measure('पंचतंत्र की कहानी', 46) + 110;
+  mk('path', { d: `M ${-rw / 2 - 40} -30 L ${-rw / 2} -30 L ${-rw / 2} 34 L ${-rw / 2 - 40} 34 L ${-rw / 2 - 20} 2 Z M ${rw / 2 + 40} -30 L ${rw / 2} -30 L ${rw / 2} 34 L ${rw / 2 + 40} 34 L ${rw / 2 + 20} 2 Z`, fill: '#B71C1C' }, rib);
+  mk('rect', { x: -rw / 2, y: -38, width: rw, height: 76, rx: 10, fill: '#E53935', stroke: '#fff', 'stroke-width': 5 }, rib);
+  const rt = mk('text', { x: 0, y: 16, 'font-size': 46, 'font-weight': 800, 'text-anchor': 'middle', fill: '#fff' }, rib); rt.textContent = 'पंचतंत्र की कहानी';
+  const sparkles = Array.from({ length: 12 }, (_, i) => ({ e: mk('path', { d: 'M 0 -22 L 6 -6 L 22 0 L 6 6 L 0 22 L -6 6 L -22 0 L -6 -6 Z', fill: i % 2 ? '#FFF59D' : '#fff' }, g), a: i / 12 * Math.PI * 2, d: w / 2 + 60 + (i % 3) * 50 }));
+  return { board, rib, sparkles, h };
+}
+function buildBrand() {
+  const g = $('brand');
+  const name = D.brand || 'कहानी पिटारा';
+  const w = measure(name, 32) + 110;
+  mk('rect', { x: 0, y: 0, width: w, height: 64, rx: 32, fill: 'rgba(255,255,255,0.88)' }, g);
+  mk('path', { d: 'M 24 18 h 18 q 8 0 8 8 v 22 q 0 -6 -8 -6 h -18 Z M 72 18 h -18 q -8 0 -8 8 v 22 q 0 -6 8 -6 h 18 Z', fill: '#E91E63' }, g);
+  const t = mk('text', { x: 90, y: 44, 'font-size': 32, 'font-weight': 800, fill: '#5D3A1A' }, g); t.textContent = name;
+  g.setAttribute('transform', 'translate(50,46)');
+}
+function buildQuestion() {
+  const g = $('question');
+  const card = mk('g', {}, g);
+  const label = 'सोचो बच्चों!';
+  const w = measure(label, 66) + 260;
+  mk('rect', { x: -w / 2, y: -70, width: w, height: 140, rx: 70, fill: '#7E57C2', stroke: '#fff', 'stroke-width': 8 }, card);
+  const t = mk('text', { x: -40, y: 22, 'font-size': 66, 'font-weight': 800, 'text-anchor': 'middle', fill: '#fff' }, card); t.textContent = label;
+  const ring = mk('g', { transform: `translate(${w / 2 - 80},0)` }, card);
+  mk('circle', { r: 46, fill: '#FFD54F' }, ring);
+  const arc = mk('circle', { r: 38, fill: 'none', stroke: '#E65100', 'stroke-width': 10, 'stroke-dasharray': 238.8, 'stroke-dashoffset': 0, transform: 'rotate(-90)' }, ring);
+  const num = mk('text', { x: 0, y: 20, 'font-size': 58, 'font-weight': 800, 'text-anchor': 'middle', fill: '#5D3A1A' }, ring);
+  const qs = [-1, 1].map(() => { const q = mk('text', { 'font-size': 150, 'font-weight': 800, fill: '#FFEB3B', stroke: '#5D3A1A', 'stroke-width': 8, 'paint-order': 'stroke', 'text-anchor': 'middle' }, g); q.textContent = '?'; return q; });
+  return { card, arc, num, qs, w };
+}
+function buildMoral() {
+  const g = $('moral');
+  const card = mk('g', {}, g);
+  const lines = wrap(D.story.moral, 70, 1200, 3);
+  const w = Math.max(...lines.map(l => measure(l, 70))) + 180, h = lines.length * 70 * 1.18 + 150;
+  mk('rect', { x: -w / 2, y: -h / 2 + 14, width: w, height: h, rx: 40, fill: '#C49A5A' }, card);
+  mk('rect', { x: -w / 2, y: -h / 2, width: w, height: h, rx: 40, fill: '#FFF3D6', stroke: '#E0A84E', 'stroke-width': 10 }, card);
+  textLines(card, lines, 70, { x: 0, y: -h / 2 + 105 + 54, fill: '#5D3A1A' });
+  const badge = mk('g', { transform: `translate(0,${-h / 2})` }, card);
+  mk('rect', { x: -130, y: -50, width: 260, height: 100, rx: 50, fill: '#43A047', stroke: '#fff', 'stroke-width': 7 }, badge);
+  const bt = mk('text', { x: 0, y: 22, 'font-size': 64, 'font-weight': 800, 'text-anchor': 'middle', fill: '#fff' }, badge); bt.textContent = '⭐ सीख';
+  return { card, h };
+}
+function buildEnding() {
+  const W = world('meadow');
+  const counts = {}; D.lines.forEach(l => { if (l.who !== 'narrator') counts[l.who] = (counts[l.who] || 0) + 1; });
+  const ids = D.cast.map(c => c.id).sort((a, b) => (counts[b] || 0) - (counts[a] || 0)).filter(id => D.castById[id].species !== 'crocodile').slice(0, 4);
+  const xs = { 1: [0], 2: [-1.3, 1.3], 3: [-2.3, 0, 2.3], 4: [-3.2, -1.07, 1.07, 3.2] }[Math.max(1, ids.length)];
+  const chars = ids.map((id, i) => ({ id, R: D.rigs[id], x: xs[i], i }));
+  const txt = $('ending');
+  const t = mk('text', { x: 0, y: 0, 'font-size': 150, 'font-weight': 800, 'text-anchor': 'middle', fill: '#FFEB3B', stroke: '#6D3F1A', 'stroke-width': 16, 'paint-order': 'stroke' }, txt); t.textContent = 'फिर मिलेंगे!';
+  const t2 = mk('text', { x: 0, y: 92, 'font-size': 56, 'font-weight': 800, 'text-anchor': 'middle', fill: '#fff', stroke: '#6D3F1A', 'stroke-width': 9, 'paint-order': 'stroke' }, txt); t2.textContent = 'एक नई कहानी के साथ';
+  return { W, chars };
+}
+function buildCta() {
+  const g = $('cta');
+  const head = mk('text', { x: 960, y: 150, 'font-size': 96, 'font-weight': 800, 'text-anchor': 'middle', fill: '#FFEB3B', stroke: '#6D3F1A', 'stroke-width': 14, 'paint-order': 'stroke' }, g);
+  head.textContent = 'कहानी अच्छी लगी?';
+  const thumb = (ic, c) => { ic.innerHTML = ''; mk('rect', { x: -34, y: -6, width: 16, height: 40, rx: 4, fill: c }, ic); mk('path', { d: 'M -14 -6 L 2 -34 C 6 -42 20 -40 18 -28 L 14 -12 L 34 -12 C 42 -12 46 -4 43 4 L 36 28 C 34 33 30 36 24 36 L -14 36 Z', fill: c }, ic); };
+  const arrow = (ic, c) => { ic.innerHTML = ''; mk('path', { d: 'M -30 26 C -30 -4 -8 -16 14 -16 L 14 -34 L 42 -6 L 14 22 L 14 4 C -4 4 -18 10 -30 26 Z', fill: c }, ic); };
+  const bell = (ic, c) => { ic.innerHTML = ''; mk('path', { d: 'M -26 18 C -26 -20 -16 -32 0 -34 C 16 -32 26 -20 26 18 L 34 28 H -34 Z', fill: c }, ic); mk('circle', { cx: 0, cy: 36, r: 8, fill: c }, ic); };
+  const specs = [['लाइक', '#1E88E5', thumb], ['शेयर', '#43A047', arrow], ['सब्सक्राइब', '#E53935', bell]];
+  const H = 132, size = 62;
+  const textW = specs.map(([l]) => Math.max(measure(l, size), l === 'सब्सक्राइब' ? measure('सब्सक्राइब्ड', size) : 0));
+  const widths = textW.map(w => w + 230);
+  const gap = 44, total = widths.reduce((a, b) => a + b, 0) + gap * 2;
+  let x = 960 - total / 2;
+  const btns = specs.map(([label, color, icon], i) => {
+    const w = widths[i]; const cx = x + w / 2; x += w + gap;
+    const b = mk('g', {}, g);
+    mk('rect', { x: -w / 2, y: -H / 2 + 10, width: w, height: H, rx: H / 2, fill: 'rgba(0,0,0,0.18)' }, b);
+    const bg = mk('rect', { x: -w / 2, y: -H / 2, width: w, height: H, rx: H / 2, fill: '#fff', stroke: color, 'stroke-width': 9 }, b);
+    const ic = mk('g', { transform: `translate(${-w / 2 + 82},0) scale(1.25)` }, b); icon(ic, color);
+    const lb = mk('text', { x: -w / 2 + 160 + textW[i] / 2, y: 22, 'font-size': size, 'font-weight': 800, 'text-anchor': 'middle', fill: color }, b); lb.textContent = label;
+    const stars = Array.from({ length: 8 }, (_, k) => mk('path', { d: 'M 0 -18 L 5 -5 L 18 0 L 5 5 L 0 18 L -5 5 L -18 0 L -5 -5 Z', fill: k % 2 ? '#FFD740' : color, opacity: 0 }, g));
+    return { b, bg, ic, lb, label, color, icon, cx, w, stars, iconX: -w / 2 + 82 };
+  });
+  const cursor = mk('path', { d: 'M 0 0 L 0 56 L 14 42 L 24 66 L 34 62 L 24 38 L 44 38 Z', fill: '#fff', stroke: '#3E2712', 'stroke-width': 5, 'stroke-linejoin': 'round' }, g);
+  return { head, btns, cursor };
+}
+function drawCta(t, line, out) {
+  const C = CTA, marks = line.marks || [0.3, 0.55, 0.8].map(f => line.start + (line.end - line.start) * f);
+  const Y = 320;
+  $('cta').setAttribute('opacity', 1 - out);
+  C.head.setAttribute('transform', `translate(0,${Math.sin(t * 3) * 6}) translate(960,150) scale(${pop(t, line.start - 0.3, 0.5)}) translate(-960,-150)`);
+  C.btns.forEach((B, i) => {
+    const at = marks[i], on = t >= at;
+    const press = t >= at && t < at + 0.14 ? 0.9 : 1;
+    B.bg.setAttribute('fill', on ? B.color : '#fff');
+    B.lb.setAttribute('fill', on ? '#fff' : B.color);
+    if (i === 2) B.lb.textContent = on ? 'सब्सक्राइब्ड' : 'सब्सक्राइब';
+    B.icon(B.ic, on ? '#fff' : B.color);
+    const rot = i === 2 && on ? Math.sin(t * 22) * 18 * (1 - seg(t, at + 0.1, at + 1.5)) : 0;
+    B.ic.setAttribute('transform', `translate(${B.iconX},0) scale(1.25) rotate(${rot})`);
+    const appear = pop(t, line.start + i * 0.25, 0.5);
+    const bounce = on ? -Math.abs(Math.sin((t - at) * 6)) * 10 * (1 - seg(t, at, at + 1.2)) : Math.sin(t * 2.2 + i) * 5;
+    B.b.setAttribute('transform', `translate(${B.cx},${Y + bounce}) scale(${appear * press})`);
+    B.stars.forEach((st, k) => {
+      const kk = seg(t, at, at + 0.7), a = k / 8 * Math.PI * 2;
+      st.setAttribute('opacity', on && kk < 1 ? 1 - kk : 0);
+      st.setAttribute('transform', `translate(${B.cx + Math.cos(a) * (B.w / 2 + 30) * easeOut(kk)},${Y + Math.sin(a) * 110 * easeOut(kk)}) rotate(${t * 200})`);
+    });
+  });
+  const pts = [[1760, 900, line.start]].concat(C.btns.map((B, i) => [B.cx + 40, Y + 20, marks[i]]));
+  let cx = pts[0][0], cy = pts[0][1];
+  for (let i = 1; i < pts.length; i++) {
+    if (t < pts[i - 1][2]) break;
+    const k = ease(seg(t, Math.max(pts[i - 1][2] + 0.15, pts[i][2] - 0.6), pts[i][2]));
+    cx = lerp(pts[i - 1][0], pts[i][0], k); cy = lerp(pts[i - 1][1], pts[i][1], k);
+  }
+  const pressed = marks.some(m => t >= m && t < m + 0.14);
+  C.cursor.setAttribute('transform', `translate(${cx},${cy}) scale(${(pressed ? 0.85 : 1) * 1.5})`);
+  C.cursor.setAttribute('opacity', seg(t, line.start, line.start + 0.3) * (1 - seg(t, marks[2] + 0.8, marks[2] + 1.1)));
+}
+
+// ───────────────────────── setup ─────────────────────────
+let TITLE, QUESTION, MORAL, CAPS, BUBBLES = [], QLINES = [], MORAL_LINE, BYE_LINE, CTA_LINE, CTA, SWITCH = [];
+window.setData = function (data) {
+  D = data;
+  D.castById = Object.fromEntries(D.story.cast.map(c => [c.id, c]));
+  D.cast = D.story.cast;
+  renderer.setPixelRatio(data.quality || 0.75);
+  renderer.setSize(1920, 1080, false);
+  D.rigs = {}; D.fx = {};
+  D.cast.forEach(c => {
+    const R = buildCharacter(c.species);
+    R.holder = new THREE.Group(); R.holder.add(R.root); R.holder.visible = false; scene.add(R.holder);
+    D.rigs[c.id] = R; D.fx[c.id] = buildFx($('fx'));
+  });
+  MORAL_LINE = D.lines.find(l => l.kind === 'moral');
+  BYE_LINE = D.lines.find(l => l.kind === 'bye');
+  CTA_LINE = D.lines.find(l => l.kind === 'cta');
+  const beatLines = D.lines.filter(l => l.kind === 'beat');
+  const nS = D.story.scenes.length;
+  for (let si = 0; si < nS; si++) {
+    const ls = beatLines.filter(l => l.scene === si);
+    SWITCH[si] = si === 0 ? 0 : ls[0].start - 0.55;
+  }
+  SWITCH[nS] = (CTA_LINE || BYE_LINE).start - 0.6;
+  D.story.scenes.forEach((sc, si) => {
+    const ls = []; beatLines.filter(l => l.scene === si).forEach(l => { ls[l.beat] = l; });
+    SC.push(planScene(si, sc, ls, SWITCH[si], SWITCH[si + 1]));
+  });
+  END = buildEnding();
+  TITLE = buildTitle(); QUESTION = buildQuestion(); MORAL = buildMoral(); buildBrand();
+  if (CTA_LINE) CTA = buildCta();
+  CAPS = captionsFor(D.lines);
+  QLINES = D.lines.filter(l => l.question);
+  D.lines.forEach(l => {
+    if (l.kind !== 'beat' || l.who === 'narrator') return;
+    const c = D.castById[l.who]; if (!c) return;
+    BUBBLES.push({ l, b: buildBubble(l, COLORS[D.cast.indexOf(c) % COLORS.length], c.name), scene: l.scene });
+  });
+  // warm up: compile every world's shaders once so the first frames of each scene aren't slow
+  Object.values(WORLD_CACHE).forEach(w => { showWorld(w); renderer.compile(scene, camera); });
+  ready = true;
+};
+function sceneIndexAt(t) { let i = 0; for (let k = 0; k < SWITCH.length; k++) if (t >= SWITCH[k]) i = k; return i; }
+
+// ───────────────────────── per-frame ─────────────────────────
+const V = new THREE.Vector3();
+function project(x, y, z) { V.set(x, y, z).project(camera); return { x: (V.x * 0.5 + 0.5) * 1920, y: (-V.y * 0.5 + 0.5) * 1080 }; }
+const HP = new THREE.Vector3();
+function screenOf(R) {
+  R.holder.updateMatrixWorld(true);
+  R.headTop.getWorldPosition(HP);
+  const H = project(HP.x, HP.y, HP.z);
+  const H2 = project(HP.x, HP.y + 1, HP.z);
+  const Fp = project(R.holder.position.x, R.holder.position.y, R.holder.position.z);
+  return { H, Fp, k: Math.abs(H.y - H2.y) / U * 1.05, world: HP.clone() };
+}
+
+function drawChar(S, ch, t, moralMode, water) {
+  const R = ch.R;
+  const visible = t >= ch.visFrom && t < ch.visTo;
+  R.holder.visible = visible;
+  if (!visible) { hideFx(ch.fx); return null; }
+  const x2 = xAt(ch, t);
+  const mv = moveAt(ch, t);
+  const ps = poseAt(ch, t);
+  let pose = mv ? mv.pose : (ps ? ps.pose : 'idle');
+  let emotion = emotionAt(ch, t);
+  if (moralMode) { pose = ch.croc ? 'idle' : 'celebrate'; emotion = 'happy'; }
+  const face = faceAt(S, ch, t);
+  const faceSign = face >= 0 ? 1 : -1;
+  let dy = 0;
+  for (const j of ch.jumps) if (t >= j && t < j + 0.7) { dy = Math.sin(seg(t, j, j + 0.7) * Math.PI) * 0.8; if (!mv) pose = 'celebrate'; }
+  let fallP = 0;
+  for (const f of ch.falls) if (t >= f && t < f + 1.8) { const p = t - f; fallP = p < 0.25 ? easeOut(p / 0.25) : p < 1.2 ? 1 : 1 - ease(seg(p, 1.2, 1.8)); }
+  const fly = !ch.croc && flyingAt(ch, t);
+  if (ch.c.species === 'crow' && fly) { dy += 1.5 + Math.sin(t * 3) * 0.1; pose = 'fly'; }
+  let y0 = 0;
+  if (ch.croc) {
+    const rise = ch.riseAt !== undefined ? easeOut(seg(t, ch.riseAt, ch.riseAt + 0.9)) : 1;
+    const sink = ch.sinkAt !== undefined ? ease(seg(t, ch.sinkAt, ch.sinkAt + 1.0)) : 0;
+    y0 = -0.3 - (1 - rise) * 1.0 - sink * 1.0;
+  }
+  const walkPhase = mv ? (t - mv.t0) * (mv.pose === 'run' ? 15 : 9) : 0;
+  const blink = ((t + ch.blinkSeed) % 3.6) < 0.12;
+  const mouth = mouthAt(ch.id, t);
+  R.holder.position.set(X3(x2), y0 + dy, ch.z);
+  R.holder.rotation.set(0, 0, fallP * 1.25 * faceSign);
+  R.holder.scale.setScalar(R.scale);
+  // 3/4 view toward the partner; full profile while moving; a touch toward camera when talking
+  const talking = mouth > 0.05;
+  const yaw = ch.croc ? -1.15 : face * (mv ? 1.45 : (talking ? 0.75 : 0.95));
+  R.root.rotation.y = yaw;
+  R.update({ t: t + ch.blinkSeed, mouth, emotion, pose, walkPhase, blink });
+  const sp = screenOf(R);
+  ch.fx.g.setAttribute('transform', `translate(${sp.H.x},${sp.H.y}) scale(${sp.k})`);
+  drawFx(ch, t, emotion, pose, mv, fallP, faceSign, (sp.Fp.x - sp.H.x) / sp.k, (sp.Fp.y - sp.H.y) / sp.k);
+  return { x: sp.Fp.x, hx: sp.H.x, hy: sp.H.y, face: faceSign, R };
+}
+function drawFx(ch, t, emotion, pose, mv, fallP, face, fx, fy) {
+  const F = ch.fx; hideFx(F);
+  const hx = 0, hy = 0, sc = BASE_SCALE;
+  const eyeY = hy + 80;
+  if (emotion === 'crying') F.tears.forEach((e, i) => { const p = ((t * 1.3 + i * 0.5) % 1); show(e, 1 - p, hx + (i ? 30 : -30), eyeY + p * 110, `scale(${1 + p * 0.3})`); });
+  if (pose === 'sleep' || emotion === 'sleepy') F.zzz.forEach((e, i) => { const p = ((t * 0.5 + i / 3) % 1); show(e, Math.sin(p * Math.PI), hx + 40 * face + p * 80 * face, hy - 20 - p * 140); });
+  if (emotion === 'thinking' || pose === 'think') show(F.q, 1, hx + 80 * face, hy - 30 + Math.sin(t * 4) * 8, `rotate(${Math.sin(t * 3) * 10})`);
+  if (emotion === 'angry') F.steam.forEach((e, i) => { const p = ((t * 1.6 + i * 0.5) % 1); show(e, 1 - p, hx + (i ? 50 : -50), hy - 10 - p * 90, `scale(${0.6 + p})`); });
+  if (emotion === 'scared') show(F.sweat, 1, hx + 60 * face, hy + 30 + ((t * 1.5) % 1) * 40);
+  if (emotion === 'laughing' || pose === 'laugh') show(F.haha, 1, hx + 130 * face, hy - 30 + Math.sin(t * 10) * 6, `rotate(${-8 * face + Math.sin(t * 8) * 5}) scale(${0.9 + Math.abs(Math.sin(t * 6)) * 0.15})`);
+  if (pose === 'celebrate') F.stars.forEach((e, i) => { const a = t * 2 + i * 1.256; show(e, 0.95, hx + Math.cos(a) * 130, hy + 40 + Math.sin(a) * 50, `rotate(${t * 120}) scale(${0.8 + Math.sin(t * 5 + i) * 0.3})`); });
+  const sur = ch.ems.filter(e => e.em === 'surprised' && t >= e.t && t < e.t + 1.0).pop();
+  if (sur) show(F.ex, 1, hx + 70 * face, hy - 10, `scale(${pop(t, sur.t, 0.35)})`);
+  if (fallP > 0.9) F.stars.forEach((e, i) => { const a = t * 5 + i * 1.256; show(e, 1, hx + Math.cos(a) * 70, hy - 20 + Math.sin(a) * 20, `scale(0.6)`); });
+  if (mv && mv.pose === 'run' && !ch.croc) F.dust.forEach((e, i) => { const p = ((t * 3 + i / 4) % 1); show(e, (1 - p) * 0.7, fx - face * (60 + p * 140), fy - 14 - p * 30, `scale(${0.6 + p})`); });
+  void sc;
+}
+
+const HAND = new THREE.Vector3();
+function render(t) {
+  if (!ready) return;
+  const nS = SC.length;
+  const si = sceneIndexAt(t);
+  const ending = si === nS;
+  const moralMode = MORAL_LINE && t >= MORAL_LINE.start - 0.8 && !ending;
+  const pos = {};
+  Object.values(D.rigs).forEach(R => { R.holder.visible = false; });
+  Object.values(D.fx).forEach(hideFx);
+  SC.forEach(S => S.gives.forEach(gv => { gv.m.visible = false; }));
+  if (!ending) {
+    const S = SC[si];
+    showWorld(S.W); S.W.update(t);
+    const water = !!S.W.water;
+    let cam = camAt(S, t);
+    if (moralMode) { const mc = camAt(S, MORAL_LINE.start - 0.8); const p = ease(seg(t, MORAL_LINE.start - 0.8, MORAL_LINE.start + 0.2)); cam = { x: lerp(mc.x, water ? 1000 : 960, p), s: lerp(mc.s, 0.92, p), side: lerp(mc.side || 0, 0, p), h: mc.h }; }
+    const TL = D.titleEnd || 4.6;
+    if (si === 0 && t < TL + 1) { const p = ease(seg(t, 0, TL + 1)); cam = { ...cam, s: lerp(0.8, cam.s, p) }; }
+    place3dCamera(cam, t, water);
+    Object.values(S.chars).forEach(ch => { pos[ch.id] = drawChar(S, ch, t, moralMode, water); });
+    // gives: the item arcs from the giver's paw to the receiver, then is held up
+    S.gives.forEach(gv => {
+      const a = pos[gv.from], b = pos[gv.to];
+      const p = seg(t, gv.t, gv.t + 0.85);
+      if (!a || !b || t < gv.t || t > gv.t + 2.4) return;
+      a.R.hand.getWorldPosition(HAND);
+      const bx = b.R.holder.position.x - 0.35 * (b.R.holder.position.x > a.R.holder.position.x ? 1 : -1), by = 1.0 * b.R.scale, bz = b.R.holder.position.z + 0.35;
+      const x = lerp(HAND.x, bx, ease(p)), y = lerp(HAND.y, by, p) + Math.sin(p * Math.PI) * 0.9, z = lerp(HAND.z, bz, p);
+      gv.m.visible = t < gv.t + 2.2;
+      gv.m.position.set(x, p >= 1 ? by + Math.sin(t * 6) * 0.03 : y, z);
+      gv.m.rotation.set(0, p < 1 ? p * 9 : t * 1.5, 0);
+      gv.m.scale.setScalar(1.6 * (1 - seg(t, gv.t + 1.9, gv.t + 2.2)));
+    });
+  } else {
+    showWorld(END.W); END.W.update(t);
+    camera.position.set(Math.sin(t * 0.3) * 0.3, 2.05, 8.6); camera.lookAt(0, 1.55, 0);
+    const subAt = CTA_LINE && CTA_LINE.marks ? CTA_LINE.marks[2] : -9;
+    END.chars.forEach(c => {
+      const st = SWITCH[nS] + 0.3 + c.i * 0.15;
+      const R = c.R;
+      const dy = (1 - easeOut(seg(t, st, st + 0.5))) * 4 + Math.abs(Math.sin((t - st) * 4)) * 0.08 * (t > st + 0.5 ? 1 : 0);
+      R.holder.visible = true;
+      R.holder.position.set(c.x, dy, 0.6);
+      R.holder.rotation.set(0, 0, 0);
+      R.holder.scale.setScalar(R.scale * (R.species === 'tortoise' || R.species === 'mouse' ? 1.3 : 1));
+      R.root.rotation.y = c.x < 0 ? 0.35 : (c.x > 0 ? -0.35 : 0);
+      const cheer = t >= subAt && t < subAt + 1.6;
+      R.update({ t: t + c.i, mouth: 0, emotion: 'happy', pose: cheer ? 'celebrate' : 'wave', walkPhase: 0, blink: ((t + c.i) % 3) < 0.12 });
+    });
+  }
+  renderer.render(scene, camera);
+  $('rp').setAttribute('opacity', (Math.round(t * FPS) % 2) * 0.002);   // forces a full overlay repaint each frame
+
+  // speech bubbles
+  BUBBLES.forEach(B => {
+    const { l, b } = B;
+    const on = l.scene === si && !ending && t >= l.start - 0.15 && t < l.end + 0.4;
+    if (!on || !pos[l.who]) { b.g.setAttribute('opacity', 0); return; }
+    const s = pop(t, l.start - 0.15, 0.4) * (1 - seg(t, l.end + 0.2, l.end + 0.4));
+    const hp = { x: pos[l.who].hx, y: pos[l.who].hy };
+    const nb = Object.keys(pos).filter(id => id !== l.who && pos[id]).map(id => pos[id].x);
+    const near = nb.length ? nb.reduce((a, x) => (Math.abs(x - pos[l.who].x) < Math.abs(a - pos[l.who].x) ? x : a)) : null;
+    const dir = near === null ? 0 : (pos[l.who].x >= near ? 1 : -1);
+    const bx = clamp(hp.x + dir * (b.w / 2 - 90), b.w / 2 + 40, 1880 - b.w / 2);
+    const by = clamp(hp.y - 70, b.h + (bx - b.w / 2 < 420 ? 140 : 60), 1000);
+    const tipX = clamp(hp.x - bx, -b.w / 2 + 50, b.w / 2 - 50), tipY = clamp(hp.y - by + 10, 40, 110);
+    b.tail.setAttribute('d', `M ${tipX * 0.35 - 30} -6 L ${tipX} ${tipY} L ${tipX * 0.35 + 30} -6 Z`);
+    b.cover.setAttribute('x', tipX * 0.35 - 30);
+    b.g.setAttribute('opacity', s > 0.01 ? 1 : 0);
+    b.g.setAttribute('transform', `translate(${bx},${by}) scale(${s})`);
+  });
+
+  // captions
+  const cap = CAPS.find(c => t >= c.a && t < c.b);
+  const ci = $('capIn');
+  const hideCap = moralMode && t >= MORAL_LINE.start - 0.2;
+  if (cap && !hideCap) { ci.style.visibility = 'visible'; if (ci.textContent !== cap.text) ci.textContent = cap.text; ci.style.transform = `scale(${0.85 + 0.15 * back(seg(t, cap.a, cap.a + 0.2))})`; }
+  else ci.style.visibility = 'hidden';
+
+  // question card
+  const q = QLINES.find(l => t >= l.start - 0.2 && t < l.pauseEnd + 0.2);
+  if (q) {
+    const s = pop(t, q.start - 0.2, 0.45) * (1 - seg(t, q.pauseEnd - 0.1, q.pauseEnd + 0.2));
+    QUESTION.card.setAttribute('transform', `translate(960,${130 + Math.sin(t * 3) * 6}) scale(${s})`);
+    const rem = t < q.end ? 3 : Math.max(0, q.pauseEnd - t);
+    QUESTION.num.textContent = t < q.end ? '?' : String(Math.max(1, Math.ceil(rem)));
+    QUESTION.arc.setAttribute('stroke-dashoffset', 238.8 * (1 - rem / 3));
+    QUESTION.qs.forEach((e, i) => e.setAttribute('transform', `translate(${960 + (i ? 1 : -1) * (QUESTION.w / 2 + 90)},${190 + Math.sin(t * 5 + i * 2) * 14}) rotate(${(i ? 12 : -12) + Math.sin(t * 4 + i) * 8}) scale(${s})`));
+    $('question').setAttribute('opacity', 1);
+  } else $('question').setAttribute('opacity', 0);
+
+  // moral card + tint
+  if (moralMode) {
+    const s = pop(t, MORAL_LINE.start - 0.3, 0.5);
+    MORAL.card.setAttribute('transform', `translate(960,${330 + Math.sin(t * 2) * 6}) scale(${s})`);
+    $('moral').setAttribute('opacity', 1);
+    $('tint').setAttribute('opacity', 0.35 * seg(t, MORAL_LINE.start - 0.8, MORAL_LINE.start));
+  } else { $('moral').setAttribute('opacity', 0); $('tint').setAttribute('opacity', 0); }
+
+  // like / share / subscribe, then goodbye
+  if (ending && CTA_LINE && t < BYE_LINE.start + 0.2) drawCta(t, CTA_LINE, ease(seg(t, BYE_LINE.start - 0.35, BYE_LINE.start + 0.1)));
+  else $('cta').setAttribute('opacity', 0);
+  if (ending && (!CTA_LINE || t >= BYE_LINE.start - 0.2)) {
+    const s = pop(t, CTA_LINE ? BYE_LINE.start - 0.2 : SWITCH[nS] + 0.5, 0.5);
+    $('ending').setAttribute('transform', `translate(960,${250 + Math.sin(t * 3) * 10}) scale(${s}) rotate(${Math.sin(t * 2) * 2})`);
+    $('ending').setAttribute('opacity', 1);
+  } else $('ending').setAttribute('opacity', 0);
+
+  // title card
+  const TL = D.titleEnd || 4.6;
+  if (t < TL) {
+    const out = ease(seg(t, TL - 0.7, TL - 0.1));
+    TITLE.board.setAttribute('transform', `translate(960,${430 - out * 1000}) scale(${pop(t, 0.15, 0.6)}) rotate(${Math.sin(t * 2.2) * 1.5})`);
+    TITLE.rib.setAttribute('transform', `translate(960,${430 + TITLE.h / 2 + 70 - out * 1000}) scale(${pop(t, 1.0, 0.5)})`);
+    TITLE.sparkles.forEach((s, i) => { const k = seg(t, 0.6 + i * 0.05, 1.8 + i * 0.05); s.e.setAttribute('transform', `translate(${960 + Math.cos(s.a) * s.d * easeOut(k)},${430 + Math.sin(s.a) * s.d * 0.5 * easeOut(k)}) rotate(${t * 90}) scale(${Math.sin(k * Math.PI) * 1.4})`); });
+    $('title').setAttribute('opacity', 1);
+    $('tint').setAttribute('opacity', 0.25 * (1 - out));
+  } else $('title').setAttribute('opacity', 0);
+  $('brand').setAttribute('opacity', seg(t, TL - 0.4, TL + 0.2));
+
+  // iris wipe between scenes
+  let r = 2400;
+  for (let k = 1; k < SWITCH.length; k++) { const sw = SWITCH[k]; if (t > sw - 0.5 && t < sw + 0.5) r = Math.abs(t - sw) < 0.06 ? 0 : 1300 * ease(clamp(Math.abs(t - sw) / 0.5)); }
+  if (r < 2400) {
+    $('iris').setAttribute('d', `M -10 -10 H 1930 V 1090 H -10 Z M ${960 - r} 540 a ${r} ${r} 0 1 0 ${2 * r} 0 a ${r} ${r} 0 1 0 ${-2 * r} 0 Z`);
+    $('iris').setAttribute('opacity', 1);
+  } else $('iris').setAttribute('opacity', 0);
+}
+window.render = render;
+
+// ───────────────────────── thumbnail ─────────────────────────
+window.renderThumbnail = function () {
+  const S = SC[0];
+  showWorld(S.W); S.W.update(2);
+  ['bubbles', 'question', 'moral', 'ending', 'cta', 'title', 'brand', 'iris', 'fx'].forEach(id => $(id).setAttribute('opacity', 0));
+  $('capIn').style.visibility = 'hidden';
+  $('tint').setAttribute('opacity', 0);
+  Object.values(D.rigs).forEach(R => { R.holder.visible = false; });
+  SC.forEach(x => x.gives.forEach(gv => { gv.m.visible = false; }));
+  const counts = {}; D.lines.forEach(l => { if (l.who !== 'narrator') counts[l.who] = (counts[l.who] || 0) + 1; });
+  const main = D.cast.map(c => c.id).sort((a, b) => (counts[b] || 0) - (counts[a] || 0)).slice(0, 2);
+  main.forEach((id, i) => {
+    const R = D.rigs[id];
+    const sc = clamp(2.2 / R.frameH, 1.0, 2.1);
+    R.holder.visible = true;
+    R.holder.position.set(i ? 1.9 : -1.9, R.species === 'crocodile' ? 0.05 : 0, 0.8);
+    R.holder.rotation.set(0, 0, 0); R.holder.scale.setScalar(sc);
+    R.root.rotation.y = i ? -0.5 : 0.5;
+    R.update({ t: 1.3, mouth: i ? 0 : 0.7, emotion: i ? 'surprised' : 'happy', pose: i ? 'point' : 'celebrate', walkPhase: 0, blink: false });
+  });
+  camera.position.set(0, 2.0, 8.0); camera.lookAt(0, 1.75, 0);
+  renderer.render(scene, camera);
+  const sg = $('screen');
+  const grad = mk('linearGradient', { id: 'thTop', x1: 0, y1: 0, x2: 0, y2: 1 }, $('bgDefs'));
+  mk('stop', { offset: 0, 'stop-color': '#1A0F2E', 'stop-opacity': 0.75 }, grad); mk('stop', { offset: 1, 'stop-color': '#1A0F2E', 'stop-opacity': 0 }, grad);
+  mk('rect', { x: 0, y: 0, width: 1920, height: 520, fill: 'url(#thTop)' }, sg);
+  const text = D.story.thumbnailText || D.story.title;
+  const lines = wrap(text, 190, 1700, 2);
+  lines.forEach((l, i) => {
+    const t = mk('text', { x: 960, y: 230 + i * 205, 'font-size': 190, 'font-weight': 800, 'text-anchor': 'middle', fill: i ? '#FFFFFF' : '#FFEB3B', stroke: '#3E1F0A', 'stroke-width': 26, 'paint-order': 'stroke', transform: `rotate(-2 960 ${200 + i * 205})` }, sg);
+    t.textContent = l;
+  });
+  const rib = mk('g', { transform: 'translate(960,1010)' }, sg);
+  const rw = measure('पंचतंत्र की कहानी', 54) + 90;
+  mk('rect', { x: -rw / 2, y: -46, width: rw, height: 92, rx: 46, fill: '#E53935', stroke: '#fff', 'stroke-width': 7 }, rib);
+  const rt = mk('text', { x: 0, y: 20, 'font-size': 54, 'font-weight': 800, 'text-anchor': 'middle', fill: '#fff' }, rib); rt.textContent = 'पंचतंत्र की कहानी';
+};
+
+await document.fonts.load('800 60px Baloo');
+window.__ready3d = true;
+</script>
+</body></html>
