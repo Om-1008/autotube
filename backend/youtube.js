@@ -102,7 +102,17 @@ function buildDescription(scriptData) {
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 
-  const parts = [body];
+  // Line 2 (above the fold): one-tap subscribe link; series line and playlist link follow
+  const [first, ...rest] = body.split('\n');
+  const parts = [first];
+  if (scriptData.subscribeUrl) {
+    const ask = scriptData.kids ? '🔔 नई कहानियों के लिए Subscribe करें' : scriptData.motivation ? '🔔 Aisi aur baaton ke liye Subscribe karo' : '🔔 Subscribe for more money guides';
+    parts.push(`${ask}: ${scriptData.subscribeUrl}`);
+  }
+  if (rest.join('').trim()) parts.push('', rest.join('\n').trim());
+  if (scriptData.seriesLine || scriptData.playlistUrl) {
+    parts.push('', [scriptData.seriesLine, scriptData.playlistUrl && `${scriptData.kids ? '▶️ सारी कहानियाँ' : scriptData.motivation ? '▶️ Poori series' : '▶️ Full series'}: ${scriptData.playlistUrl}`].filter(Boolean).join('\n'));
+  }
   const links = scriptData.links || [];
   if (links.length) {
     parts.push('', '🔗 LINKS', ...links.map(l => `${l.name}: ${l.url}`),
@@ -161,12 +171,40 @@ async function uploadVideo(videoPath, scriptData, { onProgress, thumbnailPath, c
     : ['personal finance', 'money tips', 'investing for beginners', 'financial freedom', 'how to save money', String(new Date().getFullYear())];
   const tags = seo.mergeTags(scriptData.tags || [], researched, defaults);
 
+  // Subscribe link, playlist link and episode number (all best-effort)
+  const meta = { ...scriptData };
+  let title = String(scriptData.title || 'Personal finance').replace(/[<>]/g, '').slice(0, 100);
+  try {
+    const sub = await subscribeUrl(youtube);
+    if (sub) meta.subscribeUrl = sub;
+  } catch (e) { log(`Subscribe link skipped (${e.message.slice(0, 100)})`); }
+  let playlistId = null;
+  if (scriptData.playlist && scriptData.playlist.title) {
+    try {
+      playlistId = await ensurePlaylist(youtube, scriptData.playlist, lang);
+      meta.playlistUrl = `https://www.youtube.com/playlist?list=${playlistId}`;
+      if (scriptData.series) {
+        // Episode number = earlier full videos in the playlist + 1 (older Shorts there don't count)
+        let n = 1, pageToken;
+        do {
+          const r = await youtube.playlistItems.list({ part: ['snippet'], playlistId, maxResults: 50, pageToken });
+          n += (r.data.items || []).filter(i => !/#shorts/i.test((i.snippet && i.snippet.title) || '')).length;
+          pageToken = r.data.nextPageToken;
+        } while (pageToken);
+        const t = scriptData.series.title && scriptData.series.title(n, title);
+        if (t && t.length <= 100) title = t;
+        if (scriptData.series.line) meta.seriesLine = scriptData.series.line(n);
+        log(`Series episode #${n}`);
+      }
+    } catch (e) { log(`⚠️ Playlist lookup failed: ${e.message.slice(0, 120)}`); }
+  }
+
   const res = await youtube.videos.insert({
     part: ['snippet', 'status'],
     requestBody: {
       snippet: {
-        title: String(scriptData.title || 'Personal finance').replace(/[<>]/g, '').slice(0, 100),
-        description: buildDescription(scriptData),
+        title,
+        description: buildDescription(meta),
         tags,
         categoryId: kids ? '1' : '27',
         defaultLanguage: lang,
@@ -220,9 +258,8 @@ async function uploadVideo(videoPath, scriptData, { onProgress, thumbnailPath, c
   }
 
   // Playlist (keeps viewers watching the next video)
-  if (scriptData.playlist && scriptData.playlist.title) {
+  if (playlistId) {
     try {
-      const playlistId = await ensurePlaylist(youtube, scriptData.playlist, lang);
       await youtube.playlistItems.insert({ part: ['snippet'], requestBody: { snippet: { playlistId, resourceId: { kind: 'youtube#video', videoId } } } });
       log(`Added to playlist “${scriptData.playlist.title}”`);
     } catch (e) {
@@ -230,7 +267,17 @@ async function uploadVideo(videoPath, scriptData, { onProgress, thumbnailPath, c
     }
   }
 
-  return { videoId, videoUrl: `https://youtu.be/${videoId}`, thumbnailSet, tags };
+  return { videoId, videoUrl: `https://youtu.be/${videoId}`, thumbnailSet, tags, title };
+}
+
+// https://www.youtube.com/@handle?sub_confirmation=1 opens the "Subscribe?" prompt in one tap
+async function subscribeUrl(youtube) {
+  const r = await youtube.channels.list({ part: ['snippet'], mine: true });
+  const ch = r.data.items && r.data.items[0];
+  if (!ch) return null;
+  const handle = ch.snippet && ch.snippet.customUrl;
+  const base = handle ? `https://www.youtube.com/${handle.startsWith('@') ? handle : '@' + handle}` : `https://www.youtube.com/channel/${ch.id}`;
+  return `${base}?sub_confirmation=1`;
 }
 
 async function ensurePlaylist(youtube, { title, description }, lang) {

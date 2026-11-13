@@ -42,7 +42,7 @@ Respond with ONLY JSON:
    "narration": [{"speak": "...", "show": "...", "part": "intro|points|example", "point": 0, "stat": false}]}],
  "outro": [{"speak": "...", "show": "..."}],                    // 1–2 closing lines; must ask to like, share and subscribe to Apna Motivation
  "shorts": [{"lesson": 0, "title": "Short title + #Shorts", "hook": "4–7 Roman words for the top banner",
-   "narration": [{"speak": "...", "show": "...", "part": "hook|points|example", "point": 0, "stat": false}]}]   // ${shorts} shorts, 25–40 seconds each, one per lesson, end with a line asking to subscribe for more
+   "narration": [{"speak": "...", "show": "...", "part": "hook|points|example", "point": 0, "stat": false}]}]   // ${shorts} shorts, 25–40 seconds each, one per lesson; do NOT add a subscribe/closing line (one pointing to the full video is added automatically)
 }
 In lesson/short narration, put "point": i on the line that explains points[i]; mark the line that states the stat number with "stat": true.`;
 }
@@ -128,8 +128,16 @@ function toReviewText(v, person) {
 }
 
 // Long video / Short → phrase list with segment tags (consumed by the renderer)
-function longPhrases(v, person) {
+const CADENCE = { 1: ['हर रोज़', 'Har roz'], 2: ['हर दो दिन', 'Har do din'], 3: ['हर तीन दिन', 'Har teen din'], 7: ['हर हफ़्ते', 'Har hafte'] };
+function longPhrases(v, person, { frequencyDays } = {}) {
   const out = v.intro.map(l => ({ ...l, seg: 'title' }));
+  // Early subscribe ask (most viewers never reach the outro), with a true upload-cadence promise
+  const c = CADENCE[frequencyDays];
+  out.push({
+    speak: `आगे बढ़ने से पहले — अगर आप भी ज़िंदगी में कुछ बड़ा करना चाहते हो, तो अपना मोटिवेशन को सब्सक्राइब कर लो।${c ? ` ${c[0]} एक नई सीख आती है।` : ''}`,
+    show: `Aage badhne se pehle — agar aap bhi zindagi mein kuch bada karna chahte ho, toh Apna Motivation ko subscribe kar lo.${c ? ` ${c[1]} ek nayi seekh aati hai.` : ''}`,
+    seg: 'title',
+  });
   v.lessons.forEach((l, i) => {
     out.push({ speak: `लेसन नंबर ${NUM[i + 1] || i + 1}।`, show: `Lesson number ${['zero', 'one', 'two', 'three', 'four', 'five'][i + 1] || i + 1}.`, seg: 'lesson', lesson: i });
     l.original.forEach(o => out.push({ speak: o, show: o, seg: 'shloka', noCaption: true, lesson: i }));
@@ -148,8 +156,9 @@ function shortPhrases(v, s) {
     if (n.part !== 'hook' && l.stat && (n.stat || n.part === 'example')) inStat = true;
     out.push({ ...n, seg: n.part === 'hook' ? 'hookonly' : (inStat ? 'stat' : 'points'), lesson: s.lesson });
   });
-  const last = out[out.length - 1];
-  if (!/subscrib/i.test(last.show)) out.push({ speak: 'ऐसी और बातों के लिए लाइक, शेयर और सब्सक्राइब करो!', show: 'Aisi aur baaton ke liye like, share aur subscribe karo!' });
+  // End by pointing to the full video (replaces any closing ask the writer added)
+  if (out.length > 1 && /subscrib|like|share/i.test(out[out.length - 1].show)) out.pop();
+  out.push({ speak: 'पूरी बात चैनल के लंबे वीडियो में है! लाइक, शेयर और सब्सक्राइब करो!', show: 'Poori baat channel ke lambe video mein hai! Like, share aur subscribe karo!' });
   out[out.length - 1].seg = 'cta';
   return out;
 }

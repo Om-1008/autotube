@@ -136,11 +136,12 @@ function storyToScript(story) {
 }
 
 // Searchable YouTube title: Hindi name | English name … in Hindi | Panchatantra Kahani (≤100 chars)
-function youtubeTitle(story) {
+function youtubeTitle(story, suffix = '') {
   const t = story.title.replace(/[|<>]/g, '').trim();
   const options = story.englishTitle
     ? [`${t} | ${story.englishTitle} Story in Hindi | Panchatantra Kahani`, `${t} | ${story.englishTitle} Story in Hindi`, `${t} | Hindi Kahani`]
     : [`${t} | Hindi Kahani | Moral Story for Kids`, `${t} | Hindi Kahani`];
+  if (suffix) { const hit = options.concat(t).map(o => o + suffix).find(o => o.length <= 100); if (hit) return hit; }
   return (options.find(o => o.length <= 100) || t).slice(0, 100);
 }
 

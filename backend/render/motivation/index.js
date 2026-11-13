@@ -52,7 +52,7 @@ function layout(phrases, piece, v, person, total0) {
       const all = g.lines.flatMap(l => l.words);
       const m = k => (all.find(w => w.w.toLowerCase().startsWith(k)) || { t0: start + 1 }).t0;
       const marks = [m('like'), m('share'), m('subscrib')].map((x, i, arr) => (i && x <= arr[i - 1] ? arr[i - 1] + 0.6 : x));
-      segs.push({ type: 'cta', start, end, marks, head: short ? 'AISI AUR BAATEIN?' : 'BAAT ACHHI LAGI?' });
+      segs.push({ type: 'cta', start, end, marks, head: short ? 'POORA VIDEO CHANNEL PAR' : 'BAAT ACHHI LAGI?' });
     }
   });
   if (short) segs.push({ type: 'hook', start: 0, end: total, text: piece.hook });
@@ -128,7 +128,7 @@ async function processMotivationJob(job, reporter, { workDir, upload = true } = 
   fs.mkdirSync(workDir, { recursive: true });
 
   // 1. Voice: every phrase of the long video and all Shorts in one Kokoro batch
-  const pieces = [{ name: 'long', mode: 'long', phrases: longPhrases(v, person) }]
+  const pieces = [{ name: 'long', mode: 'long', phrases: longPhrases(v, person, job.settings || {}) }]
     .concat(v.shorts.map((s, i) => ({ name: `short${i + 1}`, mode: 'short', hook: s.hook, title: s.title, lesson: s.lesson, phrases: shortPhrases(v, s) })));
   const nPhr = pieces.reduce((a, p) => a + p.phrases.length, 0);
   await reporter.stage('voiceover', `${nPhr} lines · long video + ${v.shorts.length} Shorts`);
@@ -187,11 +187,18 @@ async function processMotivationJob(job, reporter, { workDir, upload = true } = 
   const srt = pc => seo.toSrt(seo.cuesFromLines(pc.lay.lines.filter(l => !l.noCaption).map(l => ({ text: l.show, start: l.start, end: l.end }))));
   const refs = v.lessons.map((l, i) => `${i + 1}. ${l.title} — ${l.ref}`).join('\n');
   const playlist = { title: isChanakya ? 'Chanakya Niti | Apna Motivation' : `${person} | Apna Motivation`, description: `Genuine teachings of ${person}, explained for today's life.` };
+  // Shorts get their own playlist so the long videos are numbered as a clean series
+  const shortsPlaylist = { title: isChanakya ? 'Chanakya Niti Shorts | Apna Motivation' : `${person} Shorts | Apna Motivation`, description: `One teaching of ${person} in under a minute. Full explanations are in the long videos.` };
+  const seriesName = isChanakya ? 'Chanakya Niti' : person;
+  const series = {
+    title: (n, t) => (t.toLowerCase().includes(seriesName.toLowerCase()) ? `${t} (Part ${n})` : `${t} | ${seriesName} #${n}`),
+    line: n => `📚 ${seriesName} series — Part ${n}`,
+  };
   const longRes = await yt.uploadVideo(long.videoPath, {
     motivation: true, title: v.title, description: `${v.description}\n\n📜 Sources:\n${refs}`, tags: v.tags,
     searchQueries: v.searchQueries.length ? v.searchQueries : [`${person} motivation`],
     seoContext: `Hinglish motivation video explaining genuine teachings of ${person}: ${v.lessons.map(l => l.title).join('; ')}`,
-    hashtags: tagHash, captions: [{ lang: 'hi-Latn', name: 'Hinglish', srt: srt(long) }], playlist,
+    hashtags: tagHash, captions: [{ lang: 'hi-Latn', name: 'Hinglish', srt: srt(long) }], playlist, series,
   }, { channel: 'motivation', thumbnailPath: long.thumbPath, onProgress: p => reporter.progress(p * 0.6, `Uploading video ${p}%`), log: m => reporter.log(m) });
   reporter.log(`🎉 Video live: ${longRes.videoUrl}`);
 
@@ -204,8 +211,8 @@ async function processMotivationJob(job, reporter, { workDir, upload = true } = 
     try {
       const r = await yt.uploadVideo(pc.videoPath, {
         motivation: true, title: (pc.title && /#shorts/i.test(pc.title) ? pc.title : `${pc.title || pc.hook} #Shorts`).slice(0, 100),
-        description: `${pc.hook}\n\n📜 ${L.ref}\n\nFull video 👉 ${longRes.videoUrl}`, tags: (longRes.tags || v.tags).slice(0, 20),
-        skipTagResearch: true, hashtags: ['#Shorts', ...tagHash.slice(0, 2)], playlist,
+        description: `${pc.hook}\n\n▶️ Poora video: “${longRes.title || v.title}” 👉 ${longRes.videoUrl}\n\n📜 ${L.ref}`, tags: (longRes.tags || v.tags).slice(0, 20),
+        skipTagResearch: true, hashtags: ['#Shorts', ...tagHash.slice(0, 2)], playlist: shortsPlaylist,
       }, { channel: 'motivation', thumbnailPath: null, publishAt, onProgress: p => reporter.progress(60 + (i - 1) * (40 / (pieces.length - 1)) + p * 0.4 / (pieces.length - 1), `Uploading Short ${i} ${p}%`), log: m => reporter.log(m) });
       shortsOut.push({ youtubeId: r.videoId, youtubeUrl: r.videoUrl, publishAt, title: pc.title });
       reporter.log(`📅 Short ${i} scheduled for ${new Date(publishAt).toUTCString()}: ${r.videoUrl}`);

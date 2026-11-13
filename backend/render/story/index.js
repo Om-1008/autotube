@@ -48,6 +48,7 @@ async function processStoryJob(job, reporter, { workDir, upload = true } = {}) {
     searchQueries: story.searchQueries && story.searchQueries.length ? story.searchQueries : [`${story.englishTitle || story.title} story in hindi`],
     seoContext: `Hindi animated moral story for kids aged 3-8: "${story.title}"${story.englishTitle ? ` (${story.englishTitle})` : ''}. Characters: ${castNames}. Moral: ${story.moral}`,
     hashtags: ['#HindiKahani', '#Panchatantra', '#MoralStories', '#BachonKiKahani'],
+    series: { title: n => youtubeTitle({ ...story, title: job.title || story.title }, ` | भाग ${n}`), line: n => `📖 ${brand} — कहानी नंबर ${n}` },
     playlist: { title: process.env.KIDS_PLAYLIST || 'पंचतंत्र की कहानियाँ | Panchatantra Stories in Hindi', description: 'बच्चों के लिए प्यारी हिंदी कहानियाँ — हर कहानी में एक सीख। Animated Hindi moral stories for kids.' },
   }, { channel: 'kids', thumbnailPath: thumbPath, onProgress: p => reporter.progress(p, `Uploaded ${p}%`), log: m => reporter.log(m) });
   if (!thumbnailSet) reporter.log('Custom thumbnail not applied (needs a phone-verified YouTube channel)');

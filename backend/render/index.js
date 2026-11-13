@@ -55,6 +55,7 @@ async function processJob(job, reporter, { workDir, upload = true } = {}) {
     searchQueries: kw.length ? kw.slice(0, 2) : [title],
     seoContext: `${niche} explainer video: "${title}". ${(job.topic && job.topic.hook) || ''}`,
     hashtags: ['#PersonalFinance', '#MoneyTips', '#FinancialFreedom'],
+    series: { line: n => `📚 ${process.env.CHANNEL_NAME || 'WealthSutra'} Money Guide #${n}` },
     playlist: { title: process.env.FINANCE_PLAYLIST || 'Personal Finance Basics | WealthSutra', description: 'Simple, practical money guides: saving, budgeting, investing and building wealth.' },
   }, {
     channel: job.channel || 'finance',

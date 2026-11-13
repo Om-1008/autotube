@@ -90,7 +90,12 @@ function linkRules(links) {
     : `- Do NOT mention links, "the description", sponsors, affiliates, or promo codes — there are none. Describe tools generically (e.g. "a high-yield savings account", "a round-up app") rather than naming brands, and never claim we personally use a product.`;
 }
 
-async function writeScript(topic, niche, audience, links = []) {
+// "every two days" etc. — the upload cadence, so the subscribe ask makes a true promise
+function cadenceEn(days) {
+  return ({ 1: 'every day', 2: 'every two days', 3: 'every three days', 7: 'every week', 14: 'every two weeks' })[days] || (days <= 6 ? 'every few days' : 'regularly');
+}
+
+async function writeScript(topic, niche, audience, links = [], frequencyDays = 2) {
   const facts = (topic.facts || []).length
     ? `\nCurrent, sourced facts for this topical video (use them accurately; don't invent other current figures):\n${topic.facts.map(f => `- ${f}`).join('\n')}\n`
     : '';
@@ -109,6 +114,7 @@ Requirements:
 - 1150-1350 words of narration (8-10 minutes at 135 words/minute)
 - Conversational, no jargon, like explaining to a friend; short punchy sentences
 - Structure: Hook → Problem → 3-5 concrete steps → recap → call to action
+- Right after the hook (about 20-40 seconds in, before the first step), add ONE short, natural sentence asking new viewers to subscribe, with this promise: a new money guide ${cadenceEn(frequencyDays)}. Example: "If you're new here, hit subscribe — I post a new money guide ${cadenceEn(frequencyDays)}." Don't mention liking or sharing there.
 ${linkRules(links)}
 - Only state facts and statistics you are confident are accurate; prefer "many people" over invented precise numbers
 - Begin each step/section with an on-screen heading line in this exact form: "## Step N: <short step title>" (max 5 words after the colon, specific to this video). Don't add a heading for the hook.
@@ -225,7 +231,7 @@ async function runPipeline(channel = 'finance', existingJobId = null, { trending
 
       await r.stage('writing', 'Claude is drafting ~1,300 words');
       const links = validLinks(data.settings);
-      const { scriptText, wordCount } = await writeScript(topic, niche, audience, links);
+      const { scriptText, wordCount } = await writeScript(topic, niche, audience, links, data.settings.frequencyDays);
       r.log(`Script written: ${wordCount.toLocaleString()} words (~${Math.round(wordCount / 135)} min)`);
 
       await r.stage('finalizing', 'Description, tags and thumbnail ideas');
